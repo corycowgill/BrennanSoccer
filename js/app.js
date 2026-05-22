@@ -3,7 +3,7 @@
 
 class App {
   constructor() {
-    this.screen = 'title'; // title, team_select, stadium_select, playing, fulltime
+    this.screen = 'title'; // title, controls, team_select, stadium_select, playing, fulltime
     this.canvas = null;
     this.renderer = null;
 
@@ -66,6 +66,10 @@ class App {
         this.updateTitle(dt);
         this.renderTitle();
         break;
+      case 'controls':
+        this.updateControls(dt);
+        this.renderControls();
+        break;
       case 'team_select':
         this.updateTeamSelect(dt);
         this.renderTeamSelect();
@@ -85,13 +89,22 @@ class App {
 
   // === TITLE SCREEN ===
   updateTitle(dt) {
-    if ((input.btnPass || input.btnShoot) && this.menuInputCooldown <= 0) {
+    if (this.menuInputCooldown > 0) return;
+
+    if (input.btnPass || input.btnShoot) {
       audio.init();
       audio.resume();
       audio.playSelect();
       this.screen = 'team_select';
       this.selectingTeam = 'home';
       this.highlightedTeam = this.selectedHomeTeam;
+      this.menuInputCooldown = 0.3;
+    }
+    if (input.tackleJustPressed()) {
+      audio.init();
+      audio.resume();
+      audio.playSelect();
+      this.screen = 'controls';
       this.menuInputCooldown = 0.3;
     }
   }
@@ -158,19 +171,218 @@ class App {
     const pulse = 0.5 + Math.sin(this.titleAnim * 3) * 0.5;
     ctx.fillStyle = `rgba(255,255,255,${0.4 + pulse * 0.6})`;
     ctx.font = `bold ${Math.min(w * 0.03, 22)}px Arial`;
-    ctx.fillText('PRESS SPACE OR TAP TO START', w / 2, h * 0.85);
+    ctx.fillText('PRESS SPACE OR TAP TO START', w / 2, h * 0.82);
+
+    // Controls hint
+    ctx.fillStyle = 'rgba(200,200,255,0.5)';
+    ctx.font = `${Math.min(w * 0.022, 16)}px Arial`;
+    ctx.fillText(input.isMobile ? 'Tap here for CONTROLS' : 'Press C for CONTROLS', w / 2, h * 0.88);
 
     // Controller hint
     if (input.hasGamepad()) {
       ctx.fillStyle = 'rgba(100,255,100,0.6)';
       ctx.font = `${Math.min(w * 0.018, 14)}px Arial`;
-      ctx.fillText('Xbox Controller Detected!', w / 2, h * 0.9);
+      ctx.fillText('Xbox Controller Detected!', w / 2, h * 0.93);
     }
 
     // Version
     ctx.fillStyle = 'rgba(255,255,255,0.2)';
     ctx.font = '11px Arial';
-    ctx.fillText('v1.0', w / 2, h * 0.96);
+    ctx.fillText('v1.0', w / 2, h * 0.97);
+  }
+
+  // === CONTROLS SCREEN ===
+  updateControls(dt) {
+    if (this.menuInputCooldown > 0) return;
+
+    if (input.btnPass || input.btnShoot || input.tackleJustPressed() || input.pauseJustPressed()) {
+      audio.playSelect();
+      this.screen = 'title';
+      this.menuInputCooldown = 0.3;
+    }
+  }
+
+  renderControls() {
+    const ctx = this.renderer.ctx;
+    const w = this.renderer.width;
+    const h = this.renderer.height;
+
+    // Background
+    const grad = ctx.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, '#0a1628');
+    grad.addColorStop(0.5, '#162840');
+    grad.addColorStop(1, '#0d2137');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, w, h);
+
+    // Subtle pitch pattern in background
+    ctx.strokeStyle = 'rgba(255,255,255,0.03)';
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 20; i++) {
+      ctx.beginPath();
+      ctx.moveTo(0, i * (h / 20));
+      ctx.lineTo(w, i * (h / 20));
+      ctx.stroke();
+    }
+
+    // Header
+    ctx.fillStyle = '#FFD700';
+    ctx.font = `bold ${Math.min(w * 0.05, 40)}px Arial`;
+    ctx.textAlign = 'center';
+    ctx.shadowColor = '#FFD700';
+    ctx.shadowBlur = 10;
+    ctx.fillText('CONTROLS', w / 2, h * 0.08);
+    ctx.shadowBlur = 0;
+
+    // Layout: up to 3 columns (keyboard, touch, gamepad)
+    const isMobile = input.isMobile;
+    const sections = [];
+
+    if (!isMobile) {
+      sections.push({
+        title: 'KEYBOARD',
+        icon: 'Keyboard',
+        color: '#6CABDD',
+        controls: [
+          ['Move', 'WASD / Arrow Keys'],
+          ['Pass / Switch Player', 'SPACE or Z'],
+          ['Shoot (hold to charge)', 'X or E'],
+          ['Tackle / Slide', 'C or Q'],
+          ['Sprint', 'SHIFT'],
+          ['Pause', 'P or ESC'],
+        ],
+      });
+    }
+
+    sections.push({
+      title: isMobile ? 'TOUCH CONTROLS' : 'TOUCH (Mobile)',
+      icon: 'Touch',
+      color: '#44DDAA',
+      controls: [
+        ['Move', 'Left side joystick'],
+        ['Shoot', 'Red button (top)'],
+        ['Pass / Switch', 'Blue button (left)'],
+        ['Tackle', 'Orange button (right)'],
+        ['Sprint', 'Green button (bottom)'],
+      ],
+    });
+
+    sections.push({
+      title: 'XBOX CONTROLLER',
+      icon: 'Gamepad',
+      color: '#77DD44',
+      controls: [
+        ['Move', 'Left Stick / D-Pad'],
+        ['Pass / Switch Player', 'A Button'],
+        ['Shoot (hold to charge)', 'X Button'],
+        ['Tackle / Slide', 'B Button'],
+        ['Sprint', 'LT / RT Triggers'],
+        ['Pause', 'Start / Menu'],
+      ],
+    });
+
+    const colCount = sections.length;
+    const colW = Math.min(320, (w - 40) / colCount - 20);
+    const startX = (w - (colCount * (colW + 20))) / 2 + 10;
+    const startY = h * 0.14;
+
+    for (let s = 0; s < sections.length; s++) {
+      const sec = sections[s];
+      const x = startX + s * (colW + 20);
+      const y = startY;
+      const cardH = h * 0.65;
+
+      // Card background
+      ctx.fillStyle = 'rgba(255,255,255,0.04)';
+      this.renderer.roundRect(ctx, x, y, colW, cardH, 10);
+      ctx.fill();
+
+      ctx.strokeStyle = sec.color + '55';
+      ctx.lineWidth = 1;
+      this.renderer.roundRect(ctx, x, y, colW, cardH, 10);
+      ctx.stroke();
+
+      // Section header bar
+      ctx.fillStyle = sec.color + '22';
+      this.renderer.roundRect(ctx, x, y, colW, 40, 10);
+      ctx.fill();
+      // Cover bottom corners of header
+      ctx.fillRect(x, y + 30, colW, 10);
+
+      // Section title
+      ctx.fillStyle = sec.color;
+      ctx.font = `bold ${Math.min(16, colW * 0.055)}px Arial`;
+      ctx.textAlign = 'center';
+      ctx.fillText(sec.title, x + colW / 2, y + 26);
+
+      // Control rows
+      const rowH = Math.min(44, (cardH - 60) / sec.controls.length);
+      const rowStartY = y + 52;
+
+      for (let r = 0; r < sec.controls.length; r++) {
+        const [action, binding] = sec.controls[r];
+        const ry = rowStartY + r * rowH;
+
+        // Alternating row background
+        if (r % 2 === 0) {
+          ctx.fillStyle = 'rgba(255,255,255,0.02)';
+          ctx.fillRect(x + 4, ry - 2, colW - 8, rowH);
+        }
+
+        // Action name
+        ctx.fillStyle = '#ccc';
+        ctx.font = `${Math.min(13, colW * 0.044)}px Arial`;
+        ctx.textAlign = 'left';
+        ctx.fillText(action, x + 12, ry + 12);
+
+        // Binding (styled as a key/button)
+        ctx.fillStyle = sec.color;
+        ctx.font = `bold ${Math.min(12, colW * 0.04)}px Arial`;
+        ctx.textAlign = 'right';
+        ctx.fillText(binding, x + colW - 12, ry + 12);
+
+        // Separator line
+        if (r < sec.controls.length - 1) {
+          ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+          ctx.lineWidth = 0.5;
+          ctx.beginPath();
+          ctx.moveTo(x + 10, ry + rowH - 2);
+          ctx.lineTo(x + colW - 10, ry + rowH - 2);
+          ctx.stroke();
+        }
+      }
+    }
+
+    // Gameplay tips section
+    const tipsY = startY + h * 0.65 + 15;
+    ctx.fillStyle = 'rgba(255,215,0,0.08)';
+    const tipsW = Math.min(700, w - 40);
+    const tipsX = (w - tipsW) / 2;
+    this.renderer.roundRect(ctx, tipsX, tipsY, tipsW, h * 0.12, 8);
+    ctx.fill();
+
+    ctx.fillStyle = '#FFD700';
+    ctx.font = `bold ${Math.min(14, w * 0.02)}px Arial`;
+    ctx.textAlign = 'center';
+    ctx.fillText('GAMEPLAY TIPS', w / 2, tipsY + 18);
+
+    ctx.fillStyle = '#aaa';
+    ctx.font = `${Math.min(12, w * 0.017)}px Arial`;
+    const tips = [
+      'Hold SHOOT to charge a power shot - release to fire!',
+      'Press PASS when you don\'t have the ball to switch to the nearest player.',
+      'Use SPRINT to burst past defenders, but watch your angles!',
+    ];
+    tips.forEach((tip, i) => {
+      ctx.fillText(tip, w / 2, tipsY + 36 + i * 18);
+    });
+
+    // Back prompt
+    const pulse = 0.5 + Math.sin(this.titleAnim * 3) * 0.5;
+    ctx.fillStyle = `rgba(255,255,255,${0.3 + pulse * 0.4})`;
+    ctx.font = `bold ${Math.min(w * 0.025, 18)}px Arial`;
+    ctx.textAlign = 'center';
+    ctx.fillText(input.isMobile ? 'TAP ANYWHERE TO GO BACK' : 'PRESS SPACE OR C TO GO BACK', w / 2, h * 0.96);
   }
 
   // === TEAM SELECT ===
@@ -598,9 +810,21 @@ class App {
     audio.resume();
 
     if (this.screen === 'title') {
+      // Check if click is near the "Controls" text area (bottom portion)
+      if (y > h * 0.85) {
+        this.screen = 'controls';
+        audio.playSelect();
+        return;
+      }
       this.screen = 'team_select';
       this.selectingTeam = 'home';
       this.highlightedTeam = this.selectedHomeTeam;
+      audio.playSelect();
+      return;
+    }
+
+    if (this.screen === 'controls') {
+      this.screen = 'title';
       audio.playSelect();
       return;
     }
