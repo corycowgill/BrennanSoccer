@@ -753,7 +753,32 @@ class Renderer {
     ctx.save();
     ctx.translate(player.x, player.y);
 
-    // Selection indicator - pulsing ring
+    // Possession ring — bright cyan/white pulse at the feet of whoever
+    // has the ball. Always shown (player you don't control too) so it's
+    // obvious at a glance.
+    if (hasBall) {
+      // Outer expanding "sonar" pulse — fades as it grows
+      const pulseT = (this.time * 1.8) % 1; // 0..1 each second
+      const pulseR = 12 + pulseT * 18;
+      const pulseAlpha = 0.6 * (1 - pulseT);
+      ctx.strokeStyle = `rgba(0,255,200,${pulseAlpha})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.ellipse(0, 10, pulseR, pulseR * 0.5, 0, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Solid inner ring so it stays readable when the pulse is mid-fade
+      ctx.strokeStyle = 'rgba(0,255,200,0.95)';
+      ctx.lineWidth = 2;
+      ctx.shadowColor = '#00ffc8';
+      ctx.shadowBlur = 8;
+      ctx.beginPath();
+      ctx.ellipse(0, 10, 13, 6.5, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
+
+    // Selection indicator - pulsing ring (gold) for the player you control
     if (isControlled) {
       const pulseScale = 1 + Math.sin(this.time * 6) * 0.1;
       ctx.strokeStyle = '#FFD700';
@@ -761,19 +786,22 @@ class Renderer {
       ctx.shadowColor = '#FFD700';
       ctx.shadowBlur = 8;
       ctx.beginPath();
-      ctx.ellipse(0, 10, 14 * pulseScale, 7 * pulseScale, 0, 0, Math.PI * 2);
+      ctx.ellipse(0, 10, 16 * pulseScale, 8 * pulseScale, 0, 0, Math.PI * 2);
       ctx.stroke();
       ctx.shadowBlur = 0;
 
-      // Floating arrow
+      // Floating arrow — bigger and brighter so you can spot yourself fast
       const arrowBob = Math.sin(this.time * 4) * 3;
       ctx.fillStyle = '#FFD700';
+      ctx.shadowColor = '#FFD700';
+      ctx.shadowBlur = 6;
       ctx.beginPath();
-      ctx.moveTo(0, -30 + arrowBob);
-      ctx.lineTo(-5, -24 + arrowBob);
-      ctx.lineTo(5, -24 + arrowBob);
+      ctx.moveTo(0, -28 + arrowBob);
+      ctx.lineTo(-6, -20 + arrowBob);
+      ctx.lineTo(6, -20 + arrowBob);
       ctx.closePath();
       ctx.fill();
+      ctx.shadowBlur = 0;
     }
 
     if (isTackling) {
@@ -845,14 +873,17 @@ class Renderer {
 
     ctx.restore();
 
-    // Ball indicator when dribbling
+    // Ball indicator when dribbling — slightly larger + cyan rim glow
     if (hasBall) {
-      const bx = player.x + Math.cos(player.angle) * 12;
-      const by = player.y + Math.sin(player.angle) * 12;
+      const bx = player.x + Math.cos(player.angle) * 13;
+      const by = player.y + Math.sin(player.angle) * 13;
       ctx.save();
       ctx.translate(bx, by);
+      // Cyan rim glow so the ball pops at small scale
+      ctx.shadowColor = '#00ffc8';
+      ctx.shadowBlur = 6;
       ctx.rotate(this.time * 5);
-      this.drawSoccerBallPattern(ctx, 4.5);
+      this.drawSoccerBallPattern(ctx, 5.5);
       ctx.restore();
     }
 
@@ -1200,6 +1231,46 @@ class Renderer {
     ctx.textAlign = 'right';
     ctx.fillText(engine.half === 1 ? '1ST' : '2ND', clockX + clockW - 8, clockY + clockH / 2 + 1);
     ctx.textBaseline = 'alphabetic';
+
+    // Possession chip — shows team color of whichever side has the ball,
+    // sits just under the clock so you can tell at a glance even if the
+    // pitch is busy.
+    if (engine.ball.owner && (engine.state === 'playing' || engine.state === 'kickoff')) {
+      const side = engine.homePlayers.includes(engine.ball.owner) ? 'home' : 'away';
+      const teamData = side === 'home' ? engine.homeTeamData : engine.awayTeamData;
+      const ownerName = engine.ball.owner.name;
+      const chipY = clockY + clockH + 4;
+      const chipText = ownerName.toUpperCase();
+      ctx.font = `bold 10px ${this.fontDisplay}`;
+      const textW = ctx.measureText(chipText).width;
+      const padX = 8;
+      const ballIconW = 14;
+      const chipW = textW + padX * 2 + ballIconW + 4;
+      const chipH = 18;
+      const chipX = (w - chipW) / 2;
+
+      // Body
+      ctx.fillStyle = teamData.primaryColor;
+      ctx.fillRect(chipX, chipY, chipW, chipH);
+      // Gloss
+      const gloss = ctx.createLinearGradient(0, chipY, 0, chipY + chipH);
+      gloss.addColorStop(0, 'rgba(255,255,255,0.3)');
+      gloss.addColorStop(0.5, 'rgba(255,255,255,0)');
+      ctx.fillStyle = gloss;
+      ctx.fillRect(chipX, chipY, chipW, chipH);
+      // Tiny ball icon
+      ctx.save();
+      ctx.translate(chipX + padX + 4, chipY + chipH / 2);
+      this.drawSoccerBallPattern(ctx, 5);
+      ctx.restore();
+      // Owner name
+      ctx.fillStyle = this.getContrastColor(teamData.primaryColor);
+      ctx.font = `900 10px ${this.fontDisplay}`;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(chipText, chipX + padX + ballIconW, chipY + chipH / 2 + 1);
+      ctx.textBaseline = 'alphabetic';
+    }
 
     // Power meter
     if (engine.isChargingShot) {
