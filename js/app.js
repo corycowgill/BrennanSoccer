@@ -53,35 +53,44 @@ class App {
   }
 
   gameLoop(timestamp) {
-    const dt = Math.min(0.05, (timestamp - this.lastTime) / 1000);
-    this.lastTime = timestamp;
+    try {
+      const dt = Math.min(0.05, (timestamp - this.lastTime) / 1000);
+      this.lastTime = timestamp;
 
-    input.update();
+      input.update();
 
-    this.menuInputCooldown = Math.max(0, this.menuInputCooldown - dt);
-    this.titleAnim += dt;
+      this.menuInputCooldown = Math.max(0, this.menuInputCooldown - dt);
+      this.titleAnim += dt;
 
-    switch (this.screen) {
-      case 'title':
-        this.updateTitle(dt);
-        this.renderTitle();
-        break;
-      case 'controls':
-        this.updateControls(dt);
-        this.renderControls();
-        break;
-      case 'team_select':
-        this.updateTeamSelect(dt);
-        this.renderTeamSelect();
-        break;
-      case 'stadium_select':
-        this.updateStadiumSelect(dt);
-        this.renderStadiumSelect();
-        break;
-      case 'playing':
-        this.updatePlaying(dt);
-        this.renderPlaying();
-        break;
+      switch (this.screen) {
+        case 'title':
+          this.updateTitle(dt);
+          this.renderTitle();
+          break;
+        case 'controls':
+          this.updateControls(dt);
+          this.renderControls();
+          break;
+        case 'team_select':
+          this.updateTeamSelect(dt);
+          this.renderTeamSelect();
+          break;
+        case 'stadium_select':
+          this.updateStadiumSelect(dt);
+          this.renderStadiumSelect();
+          break;
+        case 'playing':
+          this.updatePlaying(dt);
+          this.renderPlaying();
+          break;
+      }
+    } catch (err) {
+      this.lastTime = timestamp;
+      if (typeof window.__showDebugError === 'function') {
+        window.__showDebugError('gameLoop screen=' + this.screen + ' engine.state=' + (typeof engine !== 'undefined' ? engine.state : '?'), err);
+      } else {
+        console.error('gameLoop error', err);
+      }
     }
 
     requestAnimationFrame((t) => this.gameLoop(t));

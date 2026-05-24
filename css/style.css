@@ -50,3 +50,63 @@ html, body {
 #loading.hidden {
   display: none;
 }
+
+/* Debug error overlay - shown when a runtime error is caught */
+#errorOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  max-height: 60vh;
+  overflow: auto;
+  background: rgba(180, 20, 20, 0.95);
+  color: #fff;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.4;
+  padding: 12px 14px;
+  z-index: 9999;
+  display: none;
+  white-space: pre-wrap;
+  word-break: break-word;
+  border-bottom: 2px solid #fff;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+#errorOverlay.visible {
+  display: block;
+}
+
+#errorOverlay .title {
+  font-weight: bold;
+  font-size: 14px;
+  margin-bottom: 6px;
+}
+
+#errorOverlay .close {
+  position: absolute;
+  top: 6px;
+  right: 10px;
+  background: rgba(0,0,0,0.4);
+  border: 1px solid #fff;
+  color: #fff;
+  font-size: 14px;
+  font-weight: bold;
+  padding: 2px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+#debugBadge {
+  position: fixed;
+  bottom: 4px;
+  left: 4px;
+  background: rgba(0,0,0,0.6);
+  color: #FFD700;
+  font: bold 10px monospace;
+  padding: 2px 6px;
+  border-radius: 3px;
+  z-index: 9998;
+  pointer-events: none;
+}
