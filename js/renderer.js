@@ -356,6 +356,29 @@ class Renderer {
       }
     }
 
+    // High-traffic wear: lighter grass in the center circle and goalmouths
+    // (where the most footfall happens in a real match)
+    const wear = (cx, cy, r, intensity) => {
+      const wearGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+      wearGrad.addColorStop(0, `rgba(165,180,120,${intensity})`);
+      wearGrad.addColorStop(1, 'rgba(165,180,120,0)');
+      ctx.fillStyle = wearGrad;
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
+    };
+    wear(p.centerX, p.centerY, 70, 0.12);
+    wear(p.x + 60, p.centerY, 55, 0.16);
+    wear(p.x + p.width - 60, p.centerY, 55, 0.16);
+    // Subtle darker scuffs near penalty spots from constant retake action
+    const scuff = (cx, cy, r) => {
+      const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+      g.addColorStop(0, 'rgba(60,40,20,0.18)');
+      g.addColorStop(1, 'rgba(60,40,20,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
+    };
+    scuff(p.x + 90, p.centerY, 15);
+    scuff(p.x + p.width - 90, p.centerY, 15);
+
     // Pitch markings with glow
     ctx.strokeStyle = 'rgba(255,255,255,0.85)';
     ctx.lineWidth = 2.2;
@@ -440,40 +463,131 @@ class Renderer {
   }
 
   drawGoalStructure(ctx, x, top, bottom, side) {
-    const depth = side === 'left' ? -22 : 22;
+    // side === 'left' → goal opens to the right (depth extends to the left)
+    // side === 'right' → goal opens to the left (depth extends to the right)
+    const depth = side === 'left' ? -32 : 32;
+    const backX = x + depth;
+    const goalH = bottom - top;
+    const sideTriangleW = Math.abs(depth) * 0.55;
 
-    // Net fill
-    ctx.fillStyle = 'rgba(255,255,255,0.08)';
-    ctx.fillRect(side === 'left' ? x + depth : x, top, Math.abs(depth), bottom - top);
+    // === BACK NET PANEL (vertical mesh inside the goal) ===
+    // Solid back wall fill (slight dark inside the goal)
+    ctx.fillStyle = 'rgba(20,20,25,0.55)';
+    const fillX = side === 'left' ? backX : x;
+    ctx.fillRect(fillX, top, Math.abs(depth), goalH);
 
-    // Net mesh
-    ctx.strokeStyle = 'rgba(255,255,255,0.2)';
-    ctx.lineWidth = 0.4;
-    const netSpacing = 7;
-    for (let ny = top; ny <= bottom; ny += netSpacing) {
-      ctx.beginPath(); ctx.moveTo(x, ny); ctx.lineTo(x + depth, ny); ctx.stroke();
-    }
-    for (let nx = 0; nx <= Math.abs(depth); nx += netSpacing) {
+    // Subtle interior gradient (darker at top corners)
+    const innerGrad = ctx.createLinearGradient(0, top, 0, bottom);
+    innerGrad.addColorStop(0, 'rgba(0,0,0,0.25)');
+    innerGrad.addColorStop(0.5, 'rgba(0,0,0,0.05)');
+    innerGrad.addColorStop(1, 'rgba(0,0,0,0.25)');
+    ctx.fillStyle = innerGrad;
+    ctx.fillRect(fillX, top, Math.abs(depth), goalH);
+
+    // === SIDE NET (slanted from front post to back post) ===
+    // Top side panel — diagonal mesh that catches a ball lobbed in
+    const topSagPattern = (yPos, depth) => {
+      // Pattern of mesh lines forming a fan from the front post to the back
+      const lines = 8;
+      for (let i = 0; i <= lines; i++) {
+        const t = i / lines;
+        const sx = x + depth * t;
+        const sy = yPos + Math.sin(t * Math.PI) * 1.5; // sag
+        ctx.beginPath();
+        ctx.moveTo(x, yPos);
+        ctx.lineTo(sx, sy);
+        ctx.stroke();
+      }
+    };
+
+    ctx.strokeStyle = 'rgba(255,255,255,0.45)';
+    ctx.lineWidth = 0.55;
+    // Top side mesh from front-top corner spreading back
+    // (just a diamond grid look)
+
+    // === MAIN NET MESH on back panel ===
+    ctx.strokeStyle = 'rgba(255,255,255,0.32)';
+    ctx.lineWidth = 0.5;
+    const meshSpacing = 6;
+    // Vertical mesh lines on back panel (with subtle sag at the middle)
+    for (let nx = 0; nx <= Math.abs(depth); nx += meshSpacing) {
       const actualX = side === 'left' ? x - nx : x + nx;
-      ctx.beginPath(); ctx.moveTo(actualX, top); ctx.lineTo(actualX, bottom); ctx.stroke();
+      ctx.beginPath();
+      // Sag: each line dips slightly toward center vertically
+      ctx.moveTo(actualX, top);
+      const midY = (top + bottom) / 2;
+      ctx.quadraticCurveTo(actualX + (side === 'left' ? -0.5 : 0.5), midY + 1.5, actualX, bottom);
+      ctx.stroke();
+    }
+    // Horizontal mesh lines on back panel
+    for (let ny = top; ny <= bottom; ny += meshSpacing) {
+      ctx.beginPath();
+      ctx.moveTo(x, ny);
+      const sag = Math.sin((ny - top) / goalH * Math.PI) * 1.0;
+      // Mesh bulges out slightly toward bottom-back
+      ctx.lineTo(backX, ny + sag);
+      ctx.stroke();
+    }
+    // Front-to-back vertical "ribs" closer together for net density illusion
+    ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+    ctx.lineWidth = 0.35;
+    for (let ny = top + meshSpacing / 2; ny <= bottom; ny += meshSpacing) {
+      for (let nx = meshSpacing / 2; nx <= Math.abs(depth); nx += meshSpacing) {
+        const actualX = side === 'left' ? x - nx : x + nx;
+        // Small cross-mesh dots at intersections
+        ctx.beginPath();
+        ctx.arc(actualX, ny, 0.4, 0, Math.PI * 2);
+        ctx.stroke();
+      }
     }
 
-    // Posts with glow
-    ctx.strokeStyle = '#fff';
-    ctx.lineWidth = 3.5;
-    ctx.shadowColor = 'rgba(255,255,255,0.5)';
-    ctx.shadowBlur = 6;
+    // === TOP SIDE NET (slanted roof panel of the goal) ===
+    // Drawn as a quadrilateral with a soft diagonal mesh
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(x, top);
+    ctx.lineTo(backX, top);
+    ctx.lineTo(backX, top + 4);
+    ctx.lineTo(x, top + 4);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fill();
+    ctx.restore();
+
+    // === BOTTOM SIDE NET (where the ball would settle) ===
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(x, bottom);
+    ctx.lineTo(backX, bottom);
+    ctx.lineTo(backX, bottom - 4);
+    ctx.lineTo(x, bottom - 4);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fill();
+    ctx.restore();
+
+    // === GOAL POSTS with subtle glow ===
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 3.8;
+    ctx.shadowColor = 'rgba(255,255,255,0.55)';
+    ctx.shadowBlur = 7;
+    // Front upright + crossbar + back uprights
     ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, bottom); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x + depth, top); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(x, bottom); ctx.lineTo(x + depth, bottom); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(x + depth, top); ctx.lineTo(x + depth, bottom); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(backX, top); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x, bottom); ctx.lineTo(backX, bottom); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(backX, top); ctx.lineTo(backX, bottom); ctx.stroke();
     ctx.shadowBlur = 0;
 
-    // Post circles
+    // Post caps (the circular nubs where posts meet the ground)
     ctx.fillStyle = '#fff';
-    [[x, top], [x, bottom]].forEach(([px, py]) => {
+    [[x, top], [x, bottom], [backX, top], [backX, bottom]].forEach(([px, py]) => {
       ctx.beginPath(); ctx.arc(px, py, 3, 0, Math.PI * 2); ctx.fill();
     });
+
+    // Subtle inner shadow on the front post (depth cue)
+    ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x + Math.sign(depth) * 0.8, top + 2); ctx.lineTo(x + Math.sign(depth) * 0.8, bottom - 2); ctx.stroke();
   }
 
   // === SHADOWS ===
@@ -936,12 +1050,15 @@ class Renderer {
 
   // === SCREEN-SPACE UI ===
   drawVignette() {
-    if (engine.state !== 'playing' && engine.state !== 'goal_scored' && engine.state !== 'paused') return;
+    if (engine.state !== 'playing' && engine.state !== 'goal_scored' && engine.state !== 'paused' && engine.state !== 'kickoff') return;
     const ctx = this.ctx;
     const w = this.width, h = this.height;
-    const grad = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.3, w / 2, h / 2, Math.max(w, h) * 0.75);
+    // Outer fade — pulls the eye toward the pitch and away from the
+    // crowd noise around the edges
+    const grad = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.22, w / 2, h / 2, Math.max(w, h) * 0.78);
     grad.addColorStop(0, 'rgba(0,0,0,0)');
-    grad.addColorStop(1, 'rgba(0,0,0,0.35)');
+    grad.addColorStop(0.7, 'rgba(0,0,0,0.2)');
+    grad.addColorStop(1, 'rgba(0,0,0,0.55)');
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, w, h);
   }
