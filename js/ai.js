@@ -14,13 +14,13 @@ class AIController {
     const teamHasBall = ball.owner && team.includes(ball.owner);
     const isGK = player.pos === 'GK';
 
-    if (isGK) return this.updateGoalkeeper(player, team, ball, pitch, dt, isUserTeam);
+    if (isGK) return this.updateGoalkeeper(player, team, opposingTeam, ball, pitch, dt, isUserTeam);
     if (hasBall) return this.updateWithBall(player, team, opposingTeam, ball, pitch, dt);
     if (teamHasBall) return this.updateTeamHasBall(player, team, opposingTeam, ball, pitch, dt, isUserTeam);
     return this.updateDefending(player, team, opposingTeam, ball, pitch, dt, isUserTeam);
   }
 
-  updateGoalkeeper(player, team, ball, pitch, dt, isUserTeam) {
+  updateGoalkeeper(player, team, opposingTeam, ball, pitch, dt, isUserTeam) {
     const actions = { moveX: 0, moveY: 0, pass: false, shoot: false, tackle: false, sprint: false };
     const defendingLeft = player.teamSide === 'left';
     const goalX = defendingLeft ? pitch.goalLineLeft : pitch.goalLineRight;
