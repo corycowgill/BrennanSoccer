@@ -162,26 +162,27 @@ class App {
     ctx.fillStyle = flareGrad;
     ctx.fillRect(0, 0, w, h);
 
-    // Floating soccer ball — actually drawn as a ball
-    const ballR = Math.min(w, h) * 0.07;
+    // Floating soccer ball — proper truncated icosahedron pattern
+    const ballR = Math.min(w, h) * 0.08;
     const ballY = h * 0.28 + Math.sin(this.titleAnim * 1.4) * 14;
     ctx.save();
     ctx.translate(w * 0.5, ballY);
-    ctx.rotate(this.titleAnim * 0.6);
-    // Soft glow
-    ctx.shadowColor = 'rgba(255,255,255,0.6)';
-    ctx.shadowBlur = 40;
-    ctx.fillStyle = '#fff';
+    // Drop shadow under the floating ball
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.beginPath();
+    ctx.ellipse(0, ballR * 1.3, ballR * 0.7, ballR * 0.2, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Outer glow
+    ctx.shadowColor = 'rgba(255,255,255,0.55)';
+    ctx.shadowBlur = 50;
+    ctx.fillStyle = 'rgba(255,255,255,0)';
     ctx.beginPath(); ctx.arc(0, 0, ballR, 0, Math.PI * 2); ctx.fill();
     ctx.shadowBlur = 0;
-    ctx.fillStyle = '#222';
-    for (let i = 0; i < 5; i++) {
-      const a = (i / 5) * Math.PI * 2 - Math.PI / 2;
-      ctx.beginPath();
-      ctx.arc(Math.cos(a) * ballR * 0.45, Math.sin(a) * ballR * 0.45, ballR * 0.18, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.beginPath(); ctx.arc(0, 0, ballR * 0.16, 0, Math.PI * 2); ctx.fill();
+    // Rotated pattern
+    ctx.save();
+    ctx.rotate(this.titleAnim * 0.5);
+    this.renderer.drawSoccerBallPattern(ctx, ballR);
+    ctx.restore();
     ctx.restore();
 
     // Title block

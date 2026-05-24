@@ -535,38 +535,95 @@ class Renderer {
     }
 
     ctx.rotate(ball.rotation);
+    this.drawSoccerBallPattern(ctx, size);
+    ctx.restore();
+  }
 
-    // Ball body
-    const ballGrad = ctx.createRadialGradient(-1, -1, 0, 0, 0, size);
-    ballGrad.addColorStop(0, '#FFFFFF');
-    ballGrad.addColorStop(1, '#DDDDDD');
-    ctx.fillStyle = ballGrad;
+  // Regular polygon helper (path only — caller fills/strokes)
+  drawPolygon(ctx, cx, cy, radius, sides, rotationRad) {
+    ctx.beginPath();
+    for (let i = 0; i < sides; i++) {
+      const a = (i / sides) * Math.PI * 2 + rotationRad;
+      const x = cx + Math.cos(a) * radius;
+      const y = cy + Math.sin(a) * radius;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+  }
+
+  // Truncated-icosahedron soccer ball, viewed face-on at the central
+  // pentagon. 12 black pentagons + 20 white hexagons (only the front-facing
+  // ones are rendered; the rest are implied by sphere curvature).
+  drawSoccerBallPattern(ctx, size) {
+    // White base with soft top-left lighting
+    const baseGrad = ctx.createRadialGradient(-size * 0.35, -size * 0.4, 0, 0, 0, size * 1.1);
+    baseGrad.addColorStop(0, '#FFFFFF');
+    baseGrad.addColorStop(0.65, '#F2F2F2');
+    baseGrad.addColorStop(1, '#BFBFBF');
+    ctx.fillStyle = baseGrad;
     ctx.beginPath();
     ctx.arc(0, 0, size, 0, Math.PI * 2);
     ctx.fill();
 
-    // Pentagon pattern
-    ctx.fillStyle = '#222';
-    for (let i = 0; i < 5; i++) {
-      const angle = (i / 5) * Math.PI * 2 - Math.PI / 2;
-      const px = Math.cos(angle) * size * 0.45;
-      const py = Math.sin(angle) * size * 0.45;
-      ctx.beginPath();
-      ctx.arc(px, py, size * 0.18, 0, Math.PI * 2);
-      ctx.fill();
+    // Hexagon outlines surrounding the central pentagon (visible only when
+    // the ball is big enough for the line width to register).
+    if (size >= 14) {
+      ctx.strokeStyle = 'rgba(40,40,40,0.55)';
+      ctx.lineWidth = Math.max(0.6, size * 0.025);
+      const hexR = size * 0.34;
+      const hexRingR = size * 0.5;
+      for (let i = 0; i < 5; i++) {
+        const a = (i / 5) * Math.PI * 2 - Math.PI / 2 + Math.PI / 5;
+        const hx = Math.cos(a) * hexRingR;
+        const hy = Math.sin(a) * hexRingR;
+        this.drawPolygon(ctx, hx, hy, hexR, 6, a + Math.PI / 2);
+        ctx.stroke();
+      }
     }
-    // Center pentagon
-    ctx.beginPath();
-    ctx.arc(0, 0, size * 0.15, 0, Math.PI * 2);
+
+    // Central black pentagon, point-up
+    ctx.fillStyle = '#1a1a1a';
+    this.drawPolygon(ctx, 0, 0, size * 0.3, 5, -Math.PI / 2);
     ctx.fill();
 
-    ctx.strokeStyle = '#999';
-    ctx.lineWidth = 0.6;
+    // 5 outer black pentagons at the "corners" of the central pentagon,
+    // rotated inward by 180° so a flat side faces the center.
+    const outerR = size * 0.7;
+    const outerSize = size * 0.2;
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2 - Math.PI / 2 + Math.PI / 5;
+      const cx = Math.cos(a) * outerR;
+      const cy = Math.sin(a) * outerR;
+      this.drawPolygon(ctx, cx, cy, outerSize, 5, a + Math.PI / 2);
+      ctx.fill();
+    }
+
+    // Specular highlight (sphere)
+    const hi = ctx.createRadialGradient(-size * 0.35, -size * 0.4, 0, -size * 0.35, -size * 0.4, size);
+    hi.addColorStop(0, 'rgba(255,255,255,0.55)');
+    hi.addColorStop(0.35, 'rgba(255,255,255,0)');
+    ctx.fillStyle = hi;
+    ctx.beginPath();
+    ctx.arc(0, 0, size, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Subtle bottom-right shadow band for roundness
+    const sh = ctx.createRadialGradient(size * 0.3, size * 0.4, 0, size * 0.3, size * 0.4, size * 1.2);
+    sh.addColorStop(0, 'rgba(0,0,0,0)');
+    sh.addColorStop(0.6, 'rgba(0,0,0,0)');
+    sh.addColorStop(1, 'rgba(0,0,0,0.4)');
+    ctx.fillStyle = sh;
+    ctx.beginPath();
+    ctx.arc(0, 0, size, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Sphere outline
+    ctx.strokeStyle = 'rgba(30,30,30,0.65)';
+    ctx.lineWidth = Math.max(0.5, size * 0.05);
     ctx.beginPath();
     ctx.arc(0, 0, size, 0, Math.PI * 2);
     ctx.stroke();
-
-    ctx.restore();
   }
 
   // === PLAYERS ===
@@ -681,13 +738,7 @@ class Renderer {
       ctx.save();
       ctx.translate(bx, by);
       ctx.rotate(this.time * 5);
-      ctx.fillStyle = '#fff';
-      ctx.beginPath(); ctx.arc(0, 0, 4.5, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#333';
-      for (let i = 0; i < 5; i++) {
-        const a = (i / 5) * Math.PI * 2;
-        ctx.beginPath(); ctx.arc(Math.cos(a) * 2, Math.sin(a) * 2, 1.2, 0, Math.PI * 2); ctx.fill();
-      }
+      this.drawSoccerBallPattern(ctx, 4.5);
       ctx.restore();
     }
 
