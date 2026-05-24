@@ -25,6 +25,9 @@ class App {
     // Input cooldown for menus
     this.menuInputCooldown = 0;
 
+    // Pause menu cursor
+    this.pauseMenuIndex = 0;
+
     this.init();
   }
 
@@ -849,24 +852,69 @@ class App {
   }
 
   updatePlaying(dt) {
-    // Pause
+    // Pause toggle
     if (input.pauseJustPressed()) {
-      engine.togglePause();
+      if (engine.state === 'paused') {
+        engine.togglePause();
+      } else if (engine.state === 'playing') {
+        engine.togglePause();
+        this.pauseMenuIndex = 0;
+      }
       this.menuInputCooldown = 0.3;
     }
 
-    // Full time -> return to menu
+    // Pause menu navigation
+    if (engine.state === 'paused') {
+      if (this.menuInputCooldown <= 0) {
+        if (input.moveY < -0.5) {
+          this.pauseMenuIndex = Math.max(0, (this.pauseMenuIndex || 0) - 1);
+          this.menuInputCooldown = 0.18;
+          audio.playNavigate();
+        } else if (input.moveY > 0.5) {
+          this.pauseMenuIndex = Math.min(2, (this.pauseMenuIndex || 0) + 1);
+          this.menuInputCooldown = 0.18;
+          audio.playNavigate();
+        }
+        if (input.passJustPressed() || input.shootJustPressed()) {
+          this.selectPauseMenuItem(this.pauseMenuIndex || 0);
+        }
+      }
+      return;
+    }
+
+    // Full time -> rematch with same teams (any button) or quit (tackle)
     if (engine.state === 'fulltime') {
       if (input.passJustPressed() || input.shootJustPressed()) {
-        this.screen = 'title';
-        audio.stopCrowd();
-        engine.state = 'idle';
+        engine.restartMatch();
+        audio.startCrowd();
+        this.menuInputCooldown = 0.5;
+      } else if (input.tackleJustPressed()) {
+        this.quitToMenu();
         this.menuInputCooldown = 0.5;
       }
       return;
     }
 
     engine.update(dt, input);
+  }
+
+  selectPauseMenuItem(index) {
+    audio.playSelect();
+    if (index === 0) {
+      engine.togglePause();
+    } else if (index === 1) {
+      engine.restartMatch();
+      audio.startCrowd();
+    } else {
+      this.quitToMenu();
+    }
+    this.menuInputCooldown = 0.3;
+  }
+
+  quitToMenu() {
+    this.screen = 'title';
+    audio.stopCrowd();
+    engine.state = 'idle';
   }
 
   renderPlaying() {
@@ -954,9 +1002,28 @@ class App {
     }
 
     if (this.screen === 'playing' && engine.state === 'fulltime') {
-      this.screen = 'title';
-      audio.stopCrowd();
-      engine.state = 'idle';
+      engine.restartMatch();
+      audio.startCrowd();
+      return;
+    }
+
+    // Pause menu taps — figure out which row was hit
+    if (this.screen === 'playing' && engine.state === 'paused') {
+      const panelW = Math.min(360, w * 0.7);
+      const panelH = Math.min(360, h * 0.7);
+      const panelX = (w - panelW) / 2;
+      const panelY = (h - panelH) / 2;
+      const items = 3;
+      const itemH = 48;
+      const itemsStartY = panelY + panelH - itemH * items - 24;
+      for (let i = 0; i < items; i++) {
+        const iy = itemsStartY + i * itemH;
+        if (x >= panelX + 18 && x <= panelX + panelW - 18 && y >= iy + 4 && y <= iy + itemH - 4) {
+          this.pauseMenuIndex = i;
+          this.selectPauseMenuItem(i);
+          return;
+        }
+      }
     }
   }
 }

@@ -1016,13 +1016,30 @@ class Renderer {
     ctx.textAlign = 'right';
     ctx.fillText(engine.awayTeamData.shortName, sbX + sbW - colorBarW - 8, sbY + sbH / 2 + 1);
 
-    // Big center score
+    // Big center score (with pop animation when a goal just scored)
     const scoreSize = Math.min(28, sbW * 0.075);
     ctx.font = `900 ${scoreSize}px ${this.fontDisplay}`;
-    ctx.fillStyle = '#fff';
     ctx.textAlign = 'center';
-    ctx.fillText(`${engine.score.home}`, stripeMid - scoreSize * 0.65, sbY + sbH / 2 + 4);
-    ctx.fillText(`${engine.score.away}`, stripeMid + scoreSize * 0.65, sbY + sbH / 2 + 4);
+
+    const popT = Math.max(0, engine.scorePopTime || 0); // 0 → 1.2
+    const popScale = (side) => {
+      if (engine.scorePopSide !== side || popT <= 0) return 1;
+      const k = popT / 1.2;
+      return 1 + Math.sin(k * Math.PI) * 0.7;
+    };
+    const popColor = (side) => engine.scorePopSide === side && popT > 0 ? '#FFD700' : '#fff';
+
+    const drawScore = (side, x) => {
+      const scale = popScale(side);
+      ctx.save();
+      ctx.translate(x, sbY + sbH / 2 + 4);
+      ctx.scale(scale, scale);
+      ctx.fillStyle = popColor(side);
+      ctx.fillText(`${engine.score[side]}`, 0, 0);
+      ctx.restore();
+    };
+    drawScore('home', stripeMid - scoreSize * 0.65);
+    drawScore('away', stripeMid + scoreSize * 0.65);
     ctx.fillStyle = 'rgba(255,255,255,0.35)';
     ctx.fillText(':', stripeMid, sbY + sbH / 2 + 2);
 
@@ -1368,86 +1385,15 @@ class Renderer {
     }
 
     if (engine.state === 'halftime') {
-      ctx.fillStyle = 'rgba(0,0,0,0.8)';
-      ctx.fillRect(0, 0, w, h);
-      ctx.fillStyle = '#FFD700';
-      ctx.font = `bold ${Math.min(w * 0.07, 52)}px Arial`;
-      ctx.textAlign = 'center';
-      ctx.fillText('HALF TIME', w / 2, h * 0.38);
-      ctx.fillStyle = '#fff';
-      ctx.font = `bold ${Math.min(w * 0.08, 56)}px Arial`;
-      ctx.fillText(`${engine.score.home} - ${engine.score.away}`, w / 2, h * 0.52);
-      ctx.font = `${Math.min(w * 0.025, 18)}px Arial`;
-      ctx.fillStyle = '#888';
-      ctx.fillText(`${engine.homeTeamData.name}  vs  ${engine.awayTeamData.name}`, w / 2, h * 0.62);
-
-      // Goal events
-      if (engine.goalEvents.length > 0) {
-        ctx.font = '12px Arial';
-        ctx.fillStyle = '#aaa';
-        engine.goalEvents.forEach((ge, i) => {
-          ctx.fillText(`${ge.time} - ${ge.scorer} (${ge.team})`, w / 2, h * 0.68 + i * 18);
-        });
-      }
+      this.drawMatchSummary('HALF TIME', false);
     }
 
     if (engine.state === 'fulltime') {
-      ctx.fillStyle = 'rgba(0,0,0,0.85)';
-      ctx.fillRect(0, 0, w, h);
-
-      ctx.fillStyle = '#FFD700';
-      ctx.font = `bold ${Math.min(w * 0.07, 52)}px Arial`;
-      ctx.textAlign = 'center';
-      ctx.shadowColor = '#FFD700'; ctx.shadowBlur = 20;
-      ctx.fillText('FULL TIME', w / 2, h * 0.25);
-      ctx.shadowBlur = 0;
-
-      ctx.fillStyle = '#fff';
-      ctx.font = `bold ${Math.min(w * 0.12, 80)}px Arial`;
-      ctx.fillText(`${engine.score.home} - ${engine.score.away}`, w / 2, h * 0.42);
-
-      ctx.font = `bold ${Math.min(w * 0.025, 20)}px Arial`;
-      ctx.fillStyle = '#aaa';
-      ctx.fillText(`${engine.homeTeamData.name}  vs  ${engine.awayTeamData.name}`, w / 2, h * 0.5);
-
-      let winner = '';
-      if (engine.score.home > engine.score.away) winner = engine.homeTeamData.name + ' WINS!';
-      else if (engine.score.away > engine.score.home) winner = engine.awayTeamData.name + ' WINS!';
-      else winner = 'DRAW!';
-
-      ctx.fillStyle = '#FFD700';
-      ctx.font = `bold ${Math.min(w * 0.05, 38)}px Arial`;
-      ctx.shadowColor = '#FFD700'; ctx.shadowBlur = 15;
-      ctx.fillText(winner, w / 2, h * 0.62);
-      ctx.shadowBlur = 0;
-
-      // Goal scorers
-      if (engine.goalEvents.length > 0) {
-        ctx.font = '12px Arial';
-        ctx.fillStyle = '#999';
-        ctx.fillText('Goal Scorers:', w / 2, h * 0.7);
-        engine.goalEvents.forEach((ge, i) => {
-          ctx.fillStyle = '#bbb';
-          ctx.fillText(`${ge.time}  ${ge.scorer} (${ge.team})`, w / 2, h * 0.74 + i * 17);
-        });
-      }
-
-      const pulse = 0.5 + Math.sin(this.time * 3) * 0.5;
-      ctx.fillStyle = `rgba(255,255,255,${0.3 + pulse * 0.5})`;
-      ctx.font = `bold ${Math.min(w * 0.022, 16)}px Arial`;
-      ctx.fillText('Press SPACE or tap to play again', w / 2, h * 0.92);
+      this.drawMatchSummary('FULL TIME', true);
     }
 
     if (engine.state === 'paused') {
-      ctx.fillStyle = 'rgba(0,0,0,0.75)';
-      ctx.fillRect(0, 0, w, h);
-      ctx.fillStyle = '#fff';
-      ctx.font = `bold ${Math.min(w * 0.08, 56)}px Arial`;
-      ctx.textAlign = 'center';
-      ctx.fillText('PAUSED', w / 2, h * 0.45);
-      ctx.font = `${Math.min(w * 0.022, 16)}px Arial`;
-      ctx.fillStyle = '#888';
-      ctx.fillText('Press P or ESC to resume', w / 2, h * 0.54);
+      this.drawPauseMenu();
     }
 
     if (engine.state === 'kickoff') {
@@ -1473,6 +1419,253 @@ class Renderer {
       ctx.fillStyle = '#ddd';
       ctx.fillText(`${engine.homeTeamData.shortName}  vs  ${engine.awayTeamData.shortName}`, w / 2, bannerY + bannerH * 0.72);
     }
+  }
+
+  // Broadcast-style summary used for halftime and fulltime.
+  drawMatchSummary(label, isFulltime) {
+    const ctx = this.ctx;
+    const w = this.width, h = this.height;
+    const home = engine.homeTeamData;
+    const away = engine.awayTeamData;
+    const stats = engine.getStats();
+
+    // Dim backdrop
+    ctx.fillStyle = isFulltime ? 'rgba(0,0,0,0.92)' : 'rgba(0,0,0,0.85)';
+    ctx.fillRect(0, 0, w, h);
+
+    // Top header band
+    const headerH = Math.min(56, h * 0.08);
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(0, 0, w, headerH);
+    ctx.fillStyle = '#FFD700';
+    ctx.fillRect(0, headerH, w, 2);
+    ctx.fillStyle = '#FFD700';
+    ctx.font = `900 ${Math.min(28, w * 0.034)}px ${this.fontDisplay}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, w / 2, headerH / 2 + 2);
+
+    // Score row — big two color blocks with score in the middle
+    const scoreY = headerH + h * 0.04;
+    const scoreH = Math.min(150, h * 0.22);
+    const halfW = Math.min(w * 0.35, 380);
+    const scoreCenter = w / 2;
+
+    // Home block
+    ctx.fillStyle = home.primaryColor;
+    ctx.fillRect(scoreCenter - halfW, scoreY, halfW - 10, scoreH);
+    // Away block
+    ctx.fillStyle = away.primaryColor;
+    ctx.fillRect(scoreCenter + 10, scoreY, halfW - 10, scoreH);
+    // Gloss
+    const gloss = ctx.createLinearGradient(0, scoreY, 0, scoreY + scoreH);
+    gloss.addColorStop(0, 'rgba(255,255,255,0.22)');
+    gloss.addColorStop(0.5, 'rgba(255,255,255,0)');
+    ctx.fillStyle = gloss;
+    ctx.fillRect(scoreCenter - halfW, scoreY, halfW - 10, scoreH);
+    ctx.fillRect(scoreCenter + 10, scoreY, halfW - 10, scoreH);
+
+    // Team names
+    ctx.font = `900 ${Math.min(22, w * 0.025)}px ${this.fontDisplay}`;
+    ctx.fillStyle = this.getContrastColor(home.primaryColor);
+    ctx.textAlign = 'left';
+    ctx.fillText(home.shortName.toUpperCase(), scoreCenter - halfW + 14, scoreY + 22);
+    ctx.fillStyle = this.getContrastColor(away.primaryColor);
+    ctx.textAlign = 'right';
+    ctx.fillText(away.shortName.toUpperCase(), scoreCenter + halfW - 14, scoreY + 22);
+
+    // Score numbers on each side
+    ctx.font = `900 ${Math.min(90, w * 0.1)}px ${this.fontDisplay}`;
+    ctx.fillStyle = this.getContrastColor(home.primaryColor);
+    ctx.textAlign = 'right';
+    ctx.fillText(`${engine.score.home}`, scoreCenter - 18, scoreY + scoreH - 18);
+    ctx.fillStyle = this.getContrastColor(away.primaryColor);
+    ctx.textAlign = 'left';
+    ctx.fillText(`${engine.score.away}`, scoreCenter + 18, scoreY + scoreH - 18);
+
+    // Center colon plate
+    ctx.fillStyle = 'rgba(0,0,0,0.85)';
+    ctx.fillRect(scoreCenter - 10, scoreY, 20, scoreH);
+    ctx.fillStyle = '#fff';
+    ctx.font = `900 ${Math.min(60, w * 0.07)}px ${this.fontDisplay}`;
+    ctx.textAlign = 'center';
+    ctx.fillText(':', scoreCenter, scoreY + scoreH / 2 + 4);
+
+    // Winner banner on fulltime
+    if (isFulltime) {
+      let winner = '', winnerColor = '#FFD700';
+      if (engine.score.home > engine.score.away) { winner = home.name.toUpperCase() + ' WIN'; winnerColor = home.primaryColor; }
+      else if (engine.score.away > engine.score.home) { winner = away.name.toUpperCase() + ' WIN'; winnerColor = away.primaryColor; }
+      else winner = 'DRAW';
+
+      const bannerY = scoreY + scoreH + 14;
+      const bannerH = 30;
+      ctx.fillStyle = 'rgba(0,0,0,0.7)';
+      ctx.fillRect(0, bannerY, w, bannerH);
+      ctx.fillStyle = winnerColor;
+      ctx.fillRect(0, bannerY, 8, bannerH);
+      ctx.fillRect(w - 8, bannerY, 8, bannerH);
+      ctx.fillStyle = '#fff';
+      ctx.font = `900 ${Math.min(22, w * 0.026)}px ${this.fontDisplay}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(winner, w / 2, bannerY + bannerH / 2 + 1);
+    }
+
+    // Stats comparison
+    const statsTop = scoreY + scoreH + (isFulltime ? 56 : 26);
+    const statsW = Math.min(w * 0.72, 620);
+    const statsX = (w - statsW) / 2;
+    const rows = [
+      { label: 'POSSESSION', a: stats.home.possession + '%', b: stats.away.possession + '%', bar: stats.home.possession / 100 },
+      { label: 'SHOTS',      a: stats.home.shots,             b: stats.away.shots,             bar: this.barRatio(stats.home.shots, stats.away.shots) },
+      { label: 'ON TARGET',  a: stats.home.shotsOnTarget,     b: stats.away.shotsOnTarget,     bar: this.barRatio(stats.home.shotsOnTarget, stats.away.shotsOnTarget) },
+      { label: 'PASSES',     a: stats.home.passes,            b: stats.away.passes,            bar: this.barRatio(stats.home.passes, stats.away.passes) },
+      { label: 'TACKLES',    a: stats.home.tackles,           b: stats.away.tackles,           bar: this.barRatio(stats.home.tackles, stats.away.tackles) },
+    ];
+    const rowH = 26;
+
+    rows.forEach((r, i) => {
+      const ry = statsTop + i * rowH;
+      // Label (center)
+      ctx.fillStyle = 'rgba(255,255,255,0.55)';
+      ctx.font = `bold 11px ${this.fontDisplay}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(r.label, statsX + statsW / 2, ry);
+
+      // Bar
+      const barY = ry + 8;
+      const barH = 4;
+      const barW = statsW * 0.6;
+      const barX = statsX + (statsW - barW) / 2;
+      ctx.fillStyle = 'rgba(255,255,255,0.12)';
+      ctx.fillRect(barX, barY, barW, barH);
+      // Split bar in home + away colors based on ratio
+      const splitX = barX + barW * r.bar;
+      ctx.fillStyle = home.primaryColor;
+      ctx.fillRect(barX, barY, splitX - barX, barH);
+      ctx.fillStyle = away.primaryColor;
+      ctx.fillRect(splitX, barY, barX + barW - splitX, barH);
+
+      // Home value (right of label, left side)
+      ctx.fillStyle = '#fff';
+      ctx.font = `bold 14px ${this.fontMono}`;
+      ctx.textAlign = 'right';
+      ctx.fillText(String(r.a), barX - 12, ry);
+      // Away value
+      ctx.textAlign = 'left';
+      ctx.fillText(String(r.b), barX + barW + 12, ry);
+    });
+
+    // Goal scorers list at bottom (if any)
+    if (engine.goalEvents.length > 0) {
+      const goalsTop = statsTop + rows.length * rowH + 14;
+      ctx.fillStyle = 'rgba(255,215,0,0.85)';
+      ctx.font = `900 11px ${this.fontDisplay}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      ctx.fillText('GOALSCORERS', w / 2, goalsTop);
+      ctx.fillStyle = '#fff';
+      ctx.font = `bold 12px ${this.fontBody}`;
+      engine.goalEvents.forEach((ge, i) => {
+        ctx.fillText(`${ge.time}'  ${ge.scorer}  (${ge.team})`, w / 2, goalsTop + 18 + i * 16);
+      });
+    }
+
+    // Footer hint
+    const pulse = 0.5 + Math.sin(this.time * 3) * 0.5;
+    ctx.fillStyle = `rgba(255,255,255,${0.4 + pulse * 0.5})`;
+    ctx.font = `900 ${Math.min(16, w * 0.022)}px ${this.fontDisplay}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    if (isFulltime) {
+      ctx.fillText('▶  PRESS SPACE / TAP TO PLAY AGAIN', w / 2, h - 28);
+    } else {
+      ctx.fillText('SECOND HALF STARTING SOON...', w / 2, h - 28);
+    }
+    ctx.textBaseline = 'alphabetic';
+  }
+
+  // Helper for stats bar split — 0..1 where higher means home dominates.
+  barRatio(homeVal, awayVal) {
+    const total = homeVal + awayVal;
+    if (total === 0) return 0.5;
+    return homeVal / total;
+  }
+
+  drawPauseMenu() {
+    const ctx = this.ctx;
+    const w = this.width, h = this.height;
+
+    // Soft backdrop with blur-ish feel (overlay only, canvas blur is expensive)
+    ctx.fillStyle = 'rgba(5,10,20,0.82)';
+    ctx.fillRect(0, 0, w, h);
+
+    // Pause panel
+    const panelW = Math.min(360, w * 0.7);
+    const panelH = Math.min(360, h * 0.7);
+    const panelX = (w - panelW) / 2;
+    const panelY = (h - panelH) / 2;
+
+    // Drop shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(panelX + 4, panelY + 6, panelW, panelH);
+
+    // Panel body
+    ctx.fillStyle = 'rgba(16,22,36,0.98)';
+    ctx.fillRect(panelX, panelY, panelW, panelH);
+    // Top accent
+    ctx.fillStyle = '#FFD700';
+    ctx.fillRect(panelX, panelY, panelW, 4);
+
+    // Title
+    ctx.fillStyle = '#FFD700';
+    ctx.font = `900 ${Math.min(34, panelW * 0.1)}px ${this.fontDisplay}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillText('PAUSED', panelX + panelW / 2, panelY + 22);
+
+    // Current score line under title
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ctx.font = `bold ${Math.min(14, panelW * 0.04)}px ${this.fontDisplay}`;
+    const home = engine.homeTeamData, away = engine.awayTeamData;
+    ctx.fillText(`${home.shortName}  ${engine.score.home} - ${engine.score.away}  ${away.shortName}`, panelX + panelW / 2, panelY + 64);
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    ctx.font = `bold 11px ${this.fontMono}`;
+    ctx.fillText(engine.getDisplayTime() + "'   " + (engine.half === 1 ? 'FIRST HALF' : 'SECOND HALF'), panelX + panelW / 2, panelY + 84);
+
+    // Menu items
+    const items = ['RESUME', 'RESTART MATCH', 'QUIT TO MENU'];
+    const itemH = 48;
+    const itemsStartY = panelY + panelH - itemH * items.length - 24;
+    const selected = (window.app && window.app.pauseMenuIndex) || 0;
+
+    items.forEach((label, i) => {
+      const iy = itemsStartY + i * itemH;
+      const isSelected = i === selected;
+      // Item background
+      ctx.fillStyle = isSelected ? 'rgba(255,215,0,0.18)' : 'rgba(255,255,255,0.04)';
+      ctx.fillRect(panelX + 18, iy + 4, panelW - 36, itemH - 8);
+      // Left accent if selected
+      if (isSelected) {
+        ctx.fillStyle = '#FFD700';
+        ctx.fillRect(panelX + 18, iy + 4, 4, itemH - 8);
+      }
+      // Label
+      ctx.fillStyle = isSelected ? '#FFD700' : '#fff';
+      ctx.font = `900 ${Math.min(18, panelW * 0.052)}px ${this.fontDisplay}`;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(label, panelX + 38, iy + itemH / 2);
+      // Tap target hint on right for mobile
+      if (isSelected) {
+        ctx.fillStyle = 'rgba(255,215,0,0.8)';
+        ctx.textAlign = 'right';
+        ctx.fillText('▶', panelX + panelW - 38, iy + itemH / 2);
+      }
+    });
+    ctx.textBaseline = 'alphabetic';
   }
 
   // === HELPERS ===

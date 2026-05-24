@@ -66,6 +66,17 @@ class GameEngine {
     // Commentary text
     this.commentary = '';
     this.commentaryTimer = 0;
+
+    // Match stats per team
+    this.stats = this._freshStats();
+    // Score pop animation timer (renderer reads this)
+    this.scorePopTime = 0;
+    this.scorePopSide = null;
+  }
+
+  _freshStats() {
+    const blank = () => ({ shots: 0, shotsOnTarget: 0, passes: 0, tackles: 0, possessionTicks: 0 });
+    return { home: blank(), away: blank() };
   }
 
   setupMatch(homeTeamData, awayTeamData) {
@@ -75,6 +86,9 @@ class GameEngine {
     this.half = 1;
     this.matchTime = 0;
     this.goalEvents = [];
+    this.stats = this._freshStats();
+    this.scorePopTime = 0;
+    this.scorePopSide = null;
     this.particles = [];
     this.commentary = '';
     this.commentaryTimer = 0;
@@ -228,6 +242,14 @@ class GameEngine {
     this.checkGoal();
     this.checkBounds();
     this.updateParticles(dt);
+
+    // Possession tick — whoever owns the ball gets a tick this frame
+    if (this.ball.owner) {
+      const side = this.homePlayers.includes(this.ball.owner) ? 'home' : 'away';
+      this.stats[side].possessionTicks++;
+    }
+
+    if (this.scorePopTime > 0) this.scorePopTime -= dt;
   }
 
   updateControlledPlayer(dt, inp) {
@@ -353,6 +375,7 @@ class GameEngine {
       this.ball.curve = 0;
       player.kickCooldown = 0.3;
       audio.playKick(0.5);
+      this.stats[player.teamSide === 'left' ? 'home' : 'away'].passes++;
 
       // Grass spray particles
       this.spawnGrassSpray(player.x, player.y, 3);
@@ -389,6 +412,7 @@ class GameEngine {
     player.kickCooldown = 0.5;
 
     audio.playKick(0.5 + power * 0.5);
+    this.stats[player.teamSide === 'left' ? 'home' : 'away'].shots++;
 
     // More dramatic shot particles
     const particleCount = 5 + Math.floor(power * 8);
@@ -432,6 +456,7 @@ class GameEngine {
           audio.playTackle();
           this.spawnGrassSpray(other.x, other.y, 6);
           this.shakeIntensity = 3;
+          this.stats[player.teamSide === 'left' ? 'home' : 'away'].tackles++;
         }
         break;
       }
@@ -651,6 +676,10 @@ class GameEngine {
     if (team === 'home') this.score.home++;
     else this.score.away++;
 
+    this.stats[team].shotsOnTarget++;
+    this.scorePopTime = 1.2;
+    this.scorePopSide = team;
+
     this.lastGoalTeam = team;
     this.goalScorer = this.ball.lastKicker;
     this.state = 'goal_scored';
@@ -777,6 +806,35 @@ class GameEngine {
   togglePause() {
     if (this.state === 'playing') this.state = 'paused';
     else if (this.state === 'paused') this.state = 'playing';
+  }
+
+  // Reset the current match using the same two teams.
+  restartMatch() {
+    if (!this.homeTeamData || !this.awayTeamData) return;
+    this.setupMatch(this.homeTeamData, this.awayTeamData);
+  }
+
+  // Totals used by halftime/fulltime panels
+  getStats() {
+    const h = this.stats.home, a = this.stats.away;
+    const totalPossession = h.possessionTicks + a.possessionTicks;
+    const homePoss = totalPossession ? Math.round(100 * h.possessionTicks / totalPossession) : 50;
+    return {
+      home: {
+        possession: homePoss,
+        shots: h.shots,
+        shotsOnTarget: h.shotsOnTarget,
+        passes: h.passes,
+        tackles: h.tackles,
+      },
+      away: {
+        possession: 100 - homePoss,
+        shots: a.shots,
+        shotsOnTarget: a.shotsOnTarget,
+        passes: a.passes,
+        tackles: a.tackles,
+      },
+    };
   }
 }
 
