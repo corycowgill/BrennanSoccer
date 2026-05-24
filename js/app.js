@@ -519,159 +519,356 @@ class App {
     const ctx = this.renderer.ctx;
     const w = this.renderer.width;
     const h = this.renderer.height;
+    const fontDisplay = this.renderer.fontDisplay;
+    const previewTeam = TEAMS[this.highlightedTeam];
 
-    // Background
+    // Background — tinted by the highlighted team's primary color
+    const accent = previewTeam ? previewTeam.primaryColor : '#1a3a5c';
+    const tint = this.renderer.mixColor('#06101e', accent, 0.18);
     const grad = ctx.createLinearGradient(0, 0, 0, h);
-    grad.addColorStop(0, '#0a1628');
-    grad.addColorStop(1, '#1a2a3c');
+    grad.addColorStop(0, '#04080f');
+    grad.addColorStop(0.5, tint);
+    grad.addColorStop(1, '#04080f');
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, w, h);
 
-    // Header
+    // Soft pitch perspective at the bottom (just like title)
+    ctx.fillStyle = 'rgba(40,110,55,0.15)';
+    ctx.beginPath();
+    ctx.moveTo(0, h);
+    ctx.lineTo(w * 0.2, h * 0.7);
+    ctx.lineTo(w * 0.8, h * 0.7);
+    ctx.lineTo(w, h);
+    ctx.closePath();
+    ctx.fill();
+
+    // === Top bar — matchup so far ===
+    const barH = Math.min(58, h * 0.085);
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.fillRect(0, 0, w, barH);
     ctx.fillStyle = '#FFD700';
-    ctx.font = `bold ${Math.min(w * 0.04, 32)}px Arial`;
+    ctx.fillRect(0, barH, w, 2);
+
+    const isSelectingHome = this.selectingTeam === 'home';
+    const drawSlot = (label, team, x, align, isActive) => {
+      ctx.font = `bold 11px ${fontDisplay}`;
+      ctx.fillStyle = isActive ? '#FFD700' : 'rgba(255,255,255,0.4)';
+      ctx.textAlign = align;
+      ctx.textBaseline = 'top';
+      ctx.fillText(label, x, 8);
+      if (team) {
+        // Kit swatch
+        const swX = align === 'left' ? x : x - 26;
+        ctx.fillStyle = team.primaryColor;
+        ctx.fillRect(swX, 24, 26, 26);
+        ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+        ctx.strokeRect(swX + 0.5, 24.5, 25, 25);
+        // Name
+        ctx.fillStyle = '#fff';
+        ctx.font = `900 ${Math.min(20, w * 0.024)}px ${fontDisplay}`;
+        ctx.fillText(team.shortName.toUpperCase(), align === 'left' ? x + 32 : x - 32, 27);
+      } else {
+        ctx.fillStyle = 'rgba(255,255,255,0.25)';
+        ctx.font = `900 ${Math.min(20, w * 0.024)}px ${fontDisplay}`;
+        ctx.fillText('—', align === 'left' ? x + 32 : x - 32, 27);
+      }
+    };
+
+    drawSlot('HOME', isSelectingHome ? null : TEAMS[this.selectedHomeTeam], 20, 'left', isSelectingHome);
+    drawSlot('AWAY', null, w - 20, 'right', !isSelectingHome);
+
+    // Center VS
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.font = `900 ${Math.min(26, w * 0.03)}px ${fontDisplay}`;
     ctx.textAlign = 'center';
-    ctx.fillText(this.selectingTeam === 'home' ? 'SELECT HOME TEAM' : 'SELECT AWAY TEAM', w / 2, 40);
+    ctx.textBaseline = 'middle';
+    ctx.fillText('VS', w / 2, barH / 2 + 2);
 
-    // Already selected team display
-    if (this.selectingTeam === 'away') {
-      const homeTeam = TEAMS[this.selectedHomeTeam];
-      ctx.fillStyle = homeTeam.primaryColor;
-      ctx.fillRect(20, 10, 30, 30);
-      ctx.fillStyle = '#fff';
-      ctx.font = 'bold 12px Arial';
-      ctx.textAlign = 'left';
-      ctx.fillText('HOME: ' + homeTeam.shortName, 58, 30);
-    }
+    // === Layout: left = scrollable team list, right = featured team preview ===
+    // On narrow screens, hide the preview pane and use full-width list.
+    const showPreview = w >= 720;
+    const previewW = showPreview ? Math.min(380, w * 0.36) : 0;
+    const listX = 20;
+    const listY = barH + 18;
+    const listW = w - previewW - (showPreview ? 60 : 40);
+    const listH = h - listY - 50;
 
-    // Team grid
-    const cols = Math.max(2, Math.min(4, Math.floor(w / 200)));
-    const itemW = Math.min(200, (w - 40) / cols - 10);
-    const itemH = 50;
-    const startX = (w - (cols * (itemW + 10))) / 2;
-    const startY = 65;
-    const maxVisible = Math.floor((h - startY - 60) / (itemH + 6));
+    // List card background
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.fillRect(listX, listY, listW, listH);
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    ctx.strokeRect(listX + 0.5, listY + 0.5, listW - 1, listH - 1);
 
-    // Scroll to keep highlighted visible
-    const highlightRow = Math.floor(this.highlightedTeam / cols);
-    const maxScroll = Math.max(0, Math.ceil(TEAMS.length / cols) - maxVisible);
+    // Section header
+    ctx.fillStyle = 'rgba(255,215,0,0.85)';
+    ctx.font = `900 12px ${fontDisplay}`;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillText(isSelectingHome ? 'CHOOSE HOME TEAM' : 'CHOOSE AWAY TEAM', listX + 14, listY + 10);
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    ctx.font = `bold 10px ${fontDisplay}`;
+    ctx.textAlign = 'right';
+    ctx.fillText(`${TEAMS.length} TEAMS`, listX + listW - 14, listY + 10);
+
+    // Scrollable list of team rows
+    const rowH = 38;
+    const visibleTop = listY + 30;
+    const visibleH = listH - 38;
+    const maxVisible = Math.floor(visibleH / rowH);
+    const highlightRow = this.highlightedTeam;
+    const maxScroll = Math.max(0, TEAMS.length - maxVisible);
     const idealScroll = Math.max(0, Math.min(maxScroll, highlightRow - Math.floor(maxVisible / 2)));
     this.teamScrollOffset += (idealScroll - this.teamScrollOffset) * 0.2;
-
-    const scrollY = this.teamScrollOffset * (itemH + 6);
+    const scrollY = this.teamScrollOffset * rowH;
 
     ctx.save();
     ctx.beginPath();
-    ctx.rect(0, startY - 5, w, h - startY - 50);
+    ctx.rect(listX + 4, visibleTop, listW - 8, visibleH);
     ctx.clip();
 
     for (let i = 0; i < TEAMS.length; i++) {
       const team = TEAMS[i];
-      const col = i % cols;
-      const row = Math.floor(i / cols);
-      const x = startX + col * (itemW + 10);
-      const y = startY + row * (itemH + 6) - scrollY;
+      const y = visibleTop + i * rowH - scrollY;
+      if (y < visibleTop - rowH || y > visibleTop + visibleH) continue;
+      const isHi = i === this.highlightedTeam;
+      const isLocked = !isSelectingHome && i === this.selectedHomeTeam;
 
-      if (y < startY - itemH || y > h) continue;
-
-      const isHighlighted = i === this.highlightedTeam;
-      const isSelected = (this.selectingTeam === 'away' && i === this.selectedHomeTeam);
-
-      // Background
-      if (isHighlighted) {
-        ctx.fillStyle = 'rgba(255,215,0,0.3)';
-        ctx.strokeStyle = '#FFD700';
-        ctx.lineWidth = 2;
-      } else if (isSelected) {
-        ctx.fillStyle = 'rgba(100,200,100,0.2)';
-        ctx.strokeStyle = 'rgba(100,200,100,0.5)';
-        ctx.lineWidth = 1;
-      } else {
-        ctx.fillStyle = 'rgba(255,255,255,0.05)';
-        ctx.strokeStyle = 'rgba(255,255,255,0.1)';
-        ctx.lineWidth = 1;
+      // Row background
+      if (isHi) {
+        ctx.fillStyle = team.primaryColor + 'cc';
+        ctx.fillRect(listX + 6, y + 2, listW - 12, rowH - 4);
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.fillRect(listX + 6, y + 2, 4, rowH - 4);
+      } else if (i % 2 === 0) {
+        ctx.fillStyle = 'rgba(255,255,255,0.03)';
+        ctx.fillRect(listX + 6, y + 2, listW - 12, rowH - 4);
       }
 
-      this.renderer.roundRect(ctx, x, y, itemW, itemH, 6);
-      ctx.fill();
-      this.renderer.roundRect(ctx, x, y, itemW, itemH, 6);
-      ctx.stroke();
-
-      // Team color swatch
+      // Kit swatch with secondary color stripe if striped
+      const swatchX = listX + 18;
+      const swatchY = y + 8;
       ctx.fillStyle = team.primaryColor;
-      ctx.fillRect(x + 8, y + 8, 32, 32);
-      if (team.kitPattern === 'stripes') {
+      ctx.fillRect(swatchX, swatchY, 22, 22);
+      if (team.kitPattern && team.kitPattern.includes('stripes')) {
         ctx.fillStyle = team.secondaryColor;
-        ctx.fillRect(x + 16, y + 8, 8, 32);
-        ctx.fillRect(x + 32, y + 8, 8, 32);
+        ctx.fillRect(swatchX + 8, swatchY, 6, 22);
+      } else if (team.kitPattern === 'hoops' || team.kitPattern === 'hoopSingle') {
+        ctx.fillStyle = team.secondaryColor;
+        ctx.fillRect(swatchX, swatchY + 8, 22, 6);
+      } else if (team.kitPattern === 'halves') {
+        ctx.fillStyle = team.secondaryColor;
+        ctx.fillRect(swatchX + 11, swatchY, 11, 22);
       }
-      ctx.strokeStyle = '#fff';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(x + 8, y + 8, 32, 32);
+      ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+      ctx.strokeRect(swatchX + 0.5, swatchY + 0.5, 21, 21);
+
+      // Locked indicator
+      if (isLocked) {
+        ctx.fillStyle = 'rgba(0,200,80,0.85)';
+        ctx.font = `900 8px ${fontDisplay}`;
+        ctx.textAlign = 'right';
+        ctx.fillText('HOME', listX + listW - 14, y + 13);
+      }
 
       // Team name
-      ctx.fillStyle = isHighlighted ? '#FFD700' : '#fff';
-      ctx.font = `bold ${Math.min(13, itemW * 0.07)}px Arial`;
+      ctx.fillStyle = isHi ? '#fff' : '#fff';
+      ctx.font = `900 ${Math.min(14, listW * 0.022)}px ${fontDisplay}`;
       ctx.textAlign = 'left';
-      ctx.fillText(team.name, x + 46, y + 20);
+      ctx.textBaseline = 'middle';
+      ctx.fillText(team.name.toUpperCase(), swatchX + 30, y + 16);
 
-      // Rating and league
-      ctx.fillStyle = '#888';
-      ctx.font = '10px Arial';
-      ctx.fillText(`${team.league} | OVR ${team.rating}`, x + 46, y + 36);
+      // League + country
+      ctx.fillStyle = isHi ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.45)';
+      ctx.font = `bold 10px ${fontDisplay}`;
+      ctx.fillText(`${team.league} · ${team.country}`, swatchX + 30, y + 28);
 
-      // Star rating
-      const stars = Math.round(team.rating / 20);
-      ctx.fillStyle = '#FFD700';
-      ctx.font = '10px Arial';
-      ctx.textAlign = 'right';
-      ctx.fillText('★'.repeat(stars), x + itemW - 8, y + 20);
-    }
-
-    ctx.restore();
-
-    // Preview of highlighted team
-    const previewTeam = TEAMS[this.highlightedTeam];
-    if (previewTeam) {
-      const px = w - 200;
-      const py = h - 160;
-
-      ctx.fillStyle = 'rgba(0,0,0,0.5)';
-      this.renderer.roundRect(ctx, w - 210, py - 5, 205, 160, 8);
-      ctx.fill();
-
-      ctx.fillStyle = previewTeam.primaryColor;
-      ctx.font = 'bold 14px Arial';
+      // Overall rating chip (right-aligned)
+      const rating = team.rating;
+      const ratingColor = rating >= 88 ? '#FFD700' : rating >= 82 ? '#7ee87e' : rating >= 75 ? '#7ec8ff' : '#aaaaaa';
+      const chipX = listX + listW - (isLocked ? 60 : 22) - 28;
+      ctx.fillStyle = ratingColor;
+      ctx.fillRect(chipX, y + 11, 24, 16);
+      ctx.fillStyle = '#000';
+      ctx.font = `900 11px ${fontDisplay}`;
       ctx.textAlign = 'center';
-      ctx.fillText(previewTeam.name, px + 95, py + 15);
+      ctx.textBaseline = 'middle';
+      ctx.fillText(String(rating), chipX + 12, y + 19);
+    }
+    ctx.restore();
+    ctx.textBaseline = 'alphabetic';
 
-      ctx.fillStyle = '#aaa';
-      ctx.font = '11px Arial';
-      ctx.fillText(`${previewTeam.country} | ${previewTeam.league}`, px + 95, py + 32);
+    // === Preview panel ===
+    if (previewTeam && showPreview) {
+      const pX = w - previewW - 20;
+      const pY = listY;
+      const pH = listH;
+      // Big team color background
+      const previewGrad = ctx.createLinearGradient(0, pY, 0, pY + pH);
+      previewGrad.addColorStop(0, previewTeam.primaryColor);
+      previewGrad.addColorStop(1, this.renderer.darkenColor(previewTeam.primaryColor, 50));
+      ctx.fillStyle = previewGrad;
+      ctx.fillRect(pX, pY, previewW, pH);
+      // Gloss
+      const glossGrad = ctx.createLinearGradient(0, pY, 0, pY + pH * 0.5);
+      glossGrad.addColorStop(0, 'rgba(255,255,255,0.18)');
+      glossGrad.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = glossGrad;
+      ctx.fillRect(pX, pY, previewW, pH * 0.5);
+      // Dark info panel at bottom
+      ctx.fillStyle = 'rgba(0,0,0,0.55)';
+      ctx.fillRect(pX, pY + pH - 168, previewW, 168);
 
-      // Player list
+      const textColor = this.renderer.getContrastColor(previewTeam.primaryColor);
+      ctx.fillStyle = textColor;
+      ctx.font = `900 ${Math.min(28, previewW * 0.075)}px ${fontDisplay}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      ctx.fillText(previewTeam.name.toUpperCase(), pX + previewW / 2, pY + 16);
+
+      ctx.font = `bold 11px ${fontDisplay}`;
+      ctx.fillStyle = textColor === '#000' ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.7)';
+      ctx.fillText(`${previewTeam.country.toUpperCase()}  ·  ${previewTeam.league.toUpperCase()}`, pX + previewW / 2, pY + 50);
+
+      // Mini jersey graphic
+      const jerseyY = pY + 80;
+      const jerseyW = 80;
+      const jerseyH = 90;
+      const jX = pX + (previewW - jerseyW) / 2;
+      this._drawMiniJersey(ctx, jX, jerseyY, jerseyW, jerseyH, previewTeam);
+
+      // Star rating + OVR
+      const ovrY = pY + pH - 158;
+      ctx.fillStyle = '#FFD700';
+      ctx.font = `900 ${Math.min(30, previewW * 0.08)}px ${fontDisplay}`;
+      ctx.textAlign = 'center';
+      ctx.fillText(`${previewTeam.rating}`, pX + previewW / 2 - 35, ovrY + 14);
+      ctx.fillStyle = 'rgba(255,255,255,0.5)';
+      ctx.font = `bold 9px ${fontDisplay}`;
+      ctx.fillText('OVR', pX + previewW / 2 - 35, ovrY + 36);
+      // Stars
+      const stars = Math.max(1, Math.round(previewTeam.rating / 20));
+      ctx.fillStyle = '#FFD700';
+      ctx.font = `${Math.min(20, previewW * 0.05)}px ${fontDisplay}`;
+      ctx.fillText('★'.repeat(stars), pX + previewW / 2 + 30, ovrY + 16);
+      ctx.fillStyle = 'rgba(255,255,255,0.5)';
+      ctx.font = `bold 9px ${fontDisplay}`;
+      ctx.fillText('RATING', pX + previewW / 2 + 30, ovrY + 36);
+
+      // Player list under jersey
       ctx.textAlign = 'left';
-      ctx.font = '11px Arial';
+      ctx.font = `bold 10px ${fontDisplay}`;
+      const rosterY = pY + pH - 110;
       previewTeam.players.forEach((pl, i) => {
-        ctx.fillStyle = '#888';
-        ctx.fillText(pl.pos, px + 5, py + 52 + i * 20);
+        const ry = rosterY + i * 18;
+        // Position chip
+        const posColors = { GK: '#FFC107', DEF: '#4A90E2', MID: '#7ED321', FWD: '#E94B3C' };
+        ctx.fillStyle = posColors[pl.pos] || '#888';
+        ctx.fillRect(pX + 14, ry + 1, 24, 13);
+        ctx.fillStyle = '#000';
+        ctx.font = `900 9px ${fontDisplay}`;
+        ctx.textAlign = 'center';
+        ctx.fillText(pl.pos, pX + 14 + 12, ry + 11);
+        // Name
         ctx.fillStyle = '#fff';
-        ctx.fillText(`${pl.name} #${pl.num}`, px + 35, py + 52 + i * 20);
-        ctx.fillStyle = '#FFD700';
-        ctx.textAlign = 'right';
-        ctx.fillText(Math.round((pl.speed + pl.shooting + pl.passing + pl.defense) / 4), px + 190, py + 52 + i * 20);
+        ctx.font = `bold 11px ${fontDisplay}`;
         ctx.textAlign = 'left';
+        ctx.fillText(pl.name, pX + 44, ry + 11);
+        // Number
+        ctx.fillStyle = 'rgba(255,255,255,0.45)';
+        ctx.font = `bold 10px ${this.renderer.fontMono}`;
+        ctx.fillText(`#${pl.num}`, pX + previewW - 60, ry + 11);
+        // Rating
+        const r = Math.round((pl.speed + pl.shooting + pl.passing + pl.defense) / 4);
+        ctx.fillStyle = '#FFD700';
+        ctx.font = `900 11px ${fontDisplay}`;
+        ctx.textAlign = 'right';
+        ctx.fillText(String(r), pX + previewW - 14, ry + 11);
       });
     }
 
-    // Footer hints
-    ctx.fillStyle = 'rgba(255,255,255,0.4)';
-    ctx.font = '12px Arial';
+    // === Footer hint bar ===
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.fillRect(0, h - 36, w, 36);
+    ctx.fillStyle = '#FFD700';
+    ctx.fillRect(0, h - 36, w, 2);
+    ctx.fillStyle = '#fff';
+    ctx.font = `900 ${Math.min(13, w * 0.018)}px ${fontDisplay}`;
     ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
     ctx.fillText(
-      input.isMobile ? 'Tap a team to select' : 'Arrow Keys: Navigate | SPACE: Select | C: Back',
-      w / 2, h - 15
+      input.isMobile ? 'TAP A TEAM TO SELECT  ·  TAP A LOCKED PICK TO CHANGE' :
+        '↑↓ NAVIGATE   ·   SPACE / ENTER SELECT   ·   C BACK',
+      w / 2, h - 18
     );
+    ctx.textBaseline = 'alphabetic';
+  }
+
+  _drawMiniJersey(ctx, x, y, w, h, team) {
+    // Body shape (jersey + sleeves)
+    const bodyX = x + w * 0.18;
+    const bodyW = w * 0.64;
+
+    // Sleeves
+    ctx.fillStyle = team.kitPattern === 'sleeves' ? team.secondaryColor : team.primaryColor;
+    ctx.fillRect(x, y + h * 0.15, w * 0.22, h * 0.3);
+    ctx.fillRect(x + w * 0.78, y + h * 0.15, w * 0.22, h * 0.3);
+
+    // Body
+    ctx.fillStyle = team.primaryColor;
+    ctx.fillRect(bodyX, y + h * 0.05, bodyW, h * 0.85);
+
+    // Kit pattern
+    switch (team.kitPattern) {
+      case 'stripes':
+        for (let i = 0; i < 4; i++) {
+          ctx.fillStyle = i % 2 === 0 ? team.primaryColor : team.secondaryColor;
+          ctx.fillRect(bodyX + i * (bodyW / 4), y + h * 0.05, bodyW / 4 + 0.5, h * 0.85);
+        }
+        break;
+      case 'stripes_thin':
+        for (let i = 0; i < 8; i++) {
+          ctx.fillStyle = i % 2 === 0 ? team.primaryColor : team.secondaryColor;
+          ctx.fillRect(bodyX + i * (bodyW / 8), y + h * 0.05, bodyW / 8 + 0.5, h * 0.85);
+        }
+        break;
+      case 'hoops':
+        for (let i = 0; i < 5; i++) {
+          ctx.fillStyle = i % 2 === 0 ? team.primaryColor : team.secondaryColor;
+          ctx.fillRect(bodyX, y + h * 0.05 + i * (h * 0.85 / 5), bodyW, h * 0.85 / 5 + 0.5);
+        }
+        break;
+      case 'halves':
+        ctx.fillStyle = team.secondaryColor;
+        ctx.fillRect(bodyX + bodyW / 2, y + h * 0.05, bodyW / 2, h * 0.85);
+        break;
+      case 'hoopSingle':
+        ctx.fillStyle = team.secondaryColor;
+        ctx.fillRect(bodyX, y + h * 0.4, bodyW, h * 0.18);
+        break;
+    }
+
+    // Collar (V neck)
+    ctx.fillStyle = team.tertiaryColor || team.secondaryColor;
+    ctx.beginPath();
+    ctx.moveTo(x + w / 2, y);
+    ctx.lineTo(x + w / 2 - 8, y + h * 0.12);
+    ctx.lineTo(x + w / 2 + 8, y + h * 0.12);
+    ctx.closePath();
+    ctx.fill();
+    // Neck hole
+    ctx.fillStyle = '#000';
+    ctx.beginPath();
+    ctx.moveTo(x + w / 2, y + 2);
+    ctx.lineTo(x + w / 2 - 4, y + h * 0.08);
+    ctx.lineTo(x + w / 2 + 4, y + h * 0.08);
+    ctx.closePath();
+    ctx.fill();
+
+    // Drop shadow under jersey for depth
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.beginPath();
+    ctx.ellipse(x + w / 2, y + h + 4, w * 0.35, 4, 0, 0, Math.PI * 2);
+    ctx.fill();
   }
 
   // === STADIUM SELECT ===
@@ -953,33 +1150,42 @@ class App {
     }
 
     if (this.screen === 'team_select') {
-      // Calculate which team was clicked
-      const cols = Math.max(2, Math.min(4, Math.floor(w / 200)));
-      const itemW = Math.min(200, (w - 40) / cols - 10);
-      const itemH = 50;
-      const startX = (w - (cols * (itemW + 10))) / 2;
-      const startY = 65;
-      const scrollY = this.teamScrollOffset * (itemH + 6);
+      // Layout matches renderTeamSelect: scrollable list on the left.
+      const showPreview = w >= 720;
+      const previewW = showPreview ? Math.min(380, w * 0.36) : 0;
+      const listX = 20;
+      const barH = Math.min(58, h * 0.085);
+      const listY = barH + 18;
+      const listW = w - previewW - (showPreview ? 60 : 40);
+      const listH = h - listY - 50;
+      const rowH = 38;
+      const visibleTop = listY + 30;
+      const visibleH = listH - 38;
+      const scrollY = this.teamScrollOffset * rowH;
 
-      for (let i = 0; i < TEAMS.length; i++) {
-        const col = i % cols;
-        const row = Math.floor(i / cols);
-        const ix = startX + col * (itemW + 10);
-        const iy = startY + row * (itemH + 6) - scrollY;
-
-        if (x >= ix && x <= ix + itemW && y >= iy && y <= iy + itemH) {
-          this.highlightedTeam = i;
-
-          if (this.selectingTeam === 'home') {
-            this.selectedHomeTeam = i;
-            this.selectingTeam = 'away';
-            this.highlightedTeam = this.selectedAwayTeam;
-          } else {
-            this.selectedAwayTeam = i;
-            this.screen = 'stadium_select';
+      // Only register clicks inside the list area
+      if (x >= listX && x <= listX + listW && y >= visibleTop && y <= visibleTop + visibleH) {
+        for (let i = 0; i < TEAMS.length; i++) {
+          const iy = visibleTop + i * rowH - scrollY;
+          if (y >= iy && y <= iy + rowH) {
+            // First tap highlights, second tap (same row) selects — feels
+            // safer on mobile than instant select.
+            if (this.highlightedTeam === i) {
+              if (this.selectingTeam === 'home') {
+                this.selectedHomeTeam = i;
+                this.selectingTeam = 'away';
+                this.highlightedTeam = this.selectedAwayTeam;
+              } else {
+                this.selectedAwayTeam = i;
+                this.screen = 'stadium_select';
+              }
+              audio.playSelect();
+            } else {
+              this.highlightedTeam = i;
+              audio.playNavigate();
+            }
+            return;
           }
-          audio.playSelect();
-          return;
         }
       }
     }
