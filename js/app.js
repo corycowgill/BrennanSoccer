@@ -122,82 +122,147 @@ class App {
     const ctx = this.renderer.ctx;
     const w = this.renderer.width;
     const h = this.renderer.height;
+    const fontDisplay = this.renderer.fontDisplay;
+    const fontMono = this.renderer.fontMono;
 
-    // Background gradient
+    // Stadium-night background gradient
     const grad = ctx.createLinearGradient(0, 0, 0, h);
-    grad.addColorStop(0, '#0a1628');
-    grad.addColorStop(0.5, '#1a3a5c');
-    grad.addColorStop(1, '#0d2137');
+    grad.addColorStop(0, '#06101e');
+    grad.addColorStop(0.45, '#0f2a4a');
+    grad.addColorStop(0.85, '#1d4a2a');
+    grad.addColorStop(1, '#0a1f15');
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, w, h);
 
-    // Animated field lines in background
-    ctx.strokeStyle = 'rgba(255,255,255,0.05)';
-    ctx.lineWidth = 2;
-    for (let i = 0; i < 10; i++) {
-      const y = (h * 0.3) + i * 30 + Math.sin(this.titleAnim + i * 0.5) * 5;
+    // Pitch perspective: trapezoid of striped grass at bottom
+    const horizon = h * 0.55;
+    for (let i = 0; i < 8; i++) {
+      const t1 = i / 8;
+      const t2 = (i + 1) / 8;
+      const y1 = horizon + (h - horizon) * t1;
+      const y2 = horizon + (h - horizon) * t2;
+      const xL1 = w * 0.5 - (w * 0.1 + (w * 0.5) * t1);
+      const xR1 = w * 0.5 + (w * 0.1 + (w * 0.5) * t1);
+      const xL2 = w * 0.5 - (w * 0.1 + (w * 0.5) * t2);
+      const xR2 = w * 0.5 + (w * 0.1 + (w * 0.5) * t2);
+      ctx.fillStyle = i % 2 === 0 ? 'rgba(40,110,55,0.5)' : 'rgba(30,90,45,0.5)';
       ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(w, y);
-      ctx.stroke();
+      ctx.moveTo(xL1, y1);
+      ctx.lineTo(xR1, y1);
+      ctx.lineTo(xR2, y2);
+      ctx.lineTo(xL2, y2);
+      ctx.closePath();
+      ctx.fill();
     }
 
-    // Floating soccer ball in background
-    const ballY = h * 0.3 + Math.sin(this.titleAnim * 1.5) * 20;
+    // Stadium lights flare overlay
+    const flareGrad = ctx.createRadialGradient(w * 0.5, h * 0.05, 0, w * 0.5, h * 0.05, h * 0.5);
+    flareGrad.addColorStop(0, 'rgba(255,255,230,0.18)');
+    flareGrad.addColorStop(1, 'rgba(255,255,230,0)');
+    ctx.fillStyle = flareGrad;
+    ctx.fillRect(0, 0, w, h);
+
+    // Floating soccer ball — actually drawn as a ball
+    const ballR = Math.min(w, h) * 0.07;
+    const ballY = h * 0.28 + Math.sin(this.titleAnim * 1.4) * 14;
     ctx.save();
     ctx.translate(w * 0.5, ballY);
-    ctx.rotate(this.titleAnim);
-    ctx.fillStyle = 'rgba(255,255,255,0.08)';
-    ctx.beginPath();
-    ctx.arc(0, 0, Math.min(w, h) * 0.15, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.rotate(this.titleAnim * 0.6);
+    // Soft glow
+    ctx.shadowColor = 'rgba(255,255,255,0.6)';
+    ctx.shadowBlur = 40;
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(0, 0, ballR, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#222';
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2 - Math.PI / 2;
+      ctx.beginPath();
+      ctx.arc(Math.cos(a) * ballR * 0.45, Math.sin(a) * ballR * 0.45, ballR * 0.18, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.beginPath(); ctx.arc(0, 0, ballR * 0.16, 0, Math.PI * 2); ctx.fill();
     ctx.restore();
 
-    // Title
-    const titleSize = Math.min(w * 0.08, 60);
+    // Title block
+    const titleSize = Math.min(w * 0.06, 44);
     ctx.fillStyle = '#FFD700';
-    ctx.font = `bold ${titleSize}px Arial`;
+    ctx.font = `900 ${titleSize}px ${fontDisplay}`;
     ctx.textAlign = 'center';
-    ctx.shadowColor = '#FFD700';
-    ctx.shadowBlur = 20;
-    ctx.fillText("BRENNAN'S", w / 2, h * 0.3);
-
-    const subSize = Math.min(w * 0.12, 80);
-    ctx.fillStyle = '#fff';
-    ctx.font = `bold ${subSize}px Arial`;
-    ctx.shadowColor = '#fff';
-    ctx.shadowBlur = 15;
-    ctx.fillText('SOCCER', w / 2, h * 0.3 + subSize * 0.9);
-    ctx.fillText('SHOWDOWN', w / 2, h * 0.3 + subSize * 1.8);
+    ctx.shadowColor = 'rgba(255,215,0,0.6)';
+    ctx.shadowBlur = 16;
+    ctx.fillText("BRENNAN'S", w / 2, h * 0.48);
     ctx.shadowBlur = 0;
 
-    // Subtitle
-    ctx.fillStyle = '#6CABDD';
-    ctx.font = `${Math.min(w * 0.02, 16)}px Arial`;
-    ctx.fillText('32 TEAMS  |  3 STADIUMS  |  PURE FOOTBALL', w / 2, h * 0.3 + subSize * 2.3);
+    const subSize = Math.min(w * 0.14, 90);
+    // White SOCCER with red outline (jersey number style)
+    ctx.font = `900 ${subSize}px ${fontDisplay}`;
+    ctx.fillStyle = '#fff';
+    ctx.shadowColor = 'rgba(255,255,255,0.4)';
+    ctx.shadowBlur = 12;
+    ctx.fillText('SOCCER', w / 2, h * 0.48 + subSize * 0.95);
+    ctx.shadowBlur = 0;
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = '#DA291C';
+    ctx.strokeText('SOCCER', w / 2, h * 0.48 + subSize * 0.95);
+
+    // SHOWDOWN — thinner band underneath
+    ctx.fillStyle = '#FFD700';
+    ctx.font = `bold ${subSize * 0.55}px ${fontDisplay}`;
+    ctx.fillText('• SHOWDOWN •', w / 2, h * 0.48 + subSize * 1.55);
+
+    // Stats strip — like a broadcast lower third
+    const stripY = h * 0.78;
+    const stripH = 30;
+    const stripW = Math.min(w * 0.7, 520);
+    const stripX = (w - stripW) / 2;
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(stripX, stripY, stripW, stripH);
+    ctx.fillStyle = '#FFD700';
+    ctx.fillRect(stripX, stripY, stripW, 2);
+    const stats = [
+      { label: 'TEAMS', value: TEAMS.length },
+      { label: 'STADIUMS', value: STADIUMS.length },
+      { label: 'LEAGUES', value: new Set(TEAMS.map(t => t.league)).size },
+    ];
+    stats.forEach((s, i) => {
+      const cx = stripX + stripW * (i + 0.5) / stats.length;
+      ctx.fillStyle = '#fff';
+      ctx.font = `900 ${Math.min(w * 0.024, 18)}px ${fontDisplay}`;
+      ctx.fillText(String(s.value), cx, stripY + 16);
+      ctx.fillStyle = 'rgba(255,255,255,0.55)';
+      ctx.font = `bold ${Math.min(w * 0.014, 10)}px ${fontDisplay}`;
+      ctx.fillText(s.label, cx, stripY + 27);
+      if (i < stats.length - 1) {
+        ctx.fillStyle = 'rgba(255,255,255,0.15)';
+        ctx.fillRect(stripX + stripW * (i + 1) / stats.length - 0.5, stripY + 4, 1, stripH - 8);
+      }
+    });
 
     // Start prompt (pulsing)
     const pulse = 0.5 + Math.sin(this.titleAnim * 3) * 0.5;
-    ctx.fillStyle = `rgba(255,255,255,${0.4 + pulse * 0.6})`;
-    ctx.font = `bold ${Math.min(w * 0.03, 22)}px Arial`;
-    ctx.fillText('PRESS SPACE OR TAP TO START', w / 2, h * 0.82);
+    ctx.fillStyle = `rgba(255,255,255,${0.5 + pulse * 0.5})`;
+    ctx.font = `900 ${Math.min(w * 0.028, 20)}px ${fontDisplay}`;
+    ctx.textAlign = 'center';
+    ctx.fillText(input.isMobile ? '▶  TAP TO KICK OFF' : '▶  PRESS SPACE TO KICK OFF', w / 2, h * 0.9);
 
     // Controls hint
-    ctx.fillStyle = 'rgba(200,200,255,0.5)';
-    ctx.font = `${Math.min(w * 0.022, 16)}px Arial`;
-    ctx.fillText(input.isMobile ? 'Tap here for CONTROLS' : 'Press C for CONTROLS', w / 2, h * 0.88);
+    ctx.fillStyle = 'rgba(200,220,255,0.45)';
+    ctx.font = `bold ${Math.min(w * 0.018, 13)}px ${fontDisplay}`;
+    ctx.fillText(input.isMobile ? 'TAP BELOW FOR CONTROLS' : 'PRESS C FOR CONTROLS', w / 2, h * 0.94);
 
     // Controller hint
     if (input.hasGamepad()) {
-      ctx.fillStyle = 'rgba(100,255,100,0.6)';
-      ctx.font = `${Math.min(w * 0.018, 14)}px Arial`;
-      ctx.fillText('Xbox Controller Detected!', w / 2, h * 0.93);
+      ctx.fillStyle = 'rgba(100,255,100,0.7)';
+      ctx.font = `bold ${Math.min(w * 0.018, 13)}px ${fontDisplay}`;
+      ctx.fillText('🎮 XBOX CONTROLLER READY', w / 2, h * 0.97);
     }
 
-    // Version
-    ctx.fillStyle = 'rgba(255,255,255,0.2)';
-    ctx.font = '11px Arial';
-    ctx.fillText('v1.0', w / 2, h * 0.97);
+    // Version corner
+    ctx.fillStyle = 'rgba(255,255,255,0.18)';
+    ctx.font = `bold 10px ${fontMono}`;
+    ctx.textAlign = 'right';
+    ctx.fillText('v1.1', w - 8, h - 8);
   }
 
   // === CONTROLS SCREEN ===

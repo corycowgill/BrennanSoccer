@@ -14,6 +14,11 @@ class Renderer {
     this.frameCount = 0;
     this.stadiumData = null;
     this.time = 0;
+
+    // Broadcast-style font stack. Falls back gracefully on iOS / web.
+    this.fontDisplay = '"Arial Black", "Helvetica Neue", Impact, sans-serif';
+    this.fontBody = 'Arial, "Helvetica Neue", sans-serif';
+    this.fontMono = '"SFMono-Regular", "Menlo", "Consolas", "Courier New", monospace';
   }
 
   resize() {
@@ -310,6 +315,39 @@ class Renderer {
     });
 
     ctx.shadowBlur = 0;
+
+    // Corner flags (triangle pennants that flutter slightly)
+    const flagH = 22;
+    const flagW = 14;
+    const homeFlagColor = engine.homeTeamData ? engine.homeTeamData.primaryColor : '#FF3333';
+    const awayFlagColor = engine.awayTeamData ? engine.awayTeamData.primaryColor : '#3366FF';
+    const corners = [
+      { x: p.x, y: p.y, side: -1, color: homeFlagColor },
+      { x: p.x, y: p.y + p.height, side: -1, color: homeFlagColor },
+      { x: p.x + p.width, y: p.y, side: 1, color: awayFlagColor },
+      { x: p.x + p.width, y: p.y + p.height, side: 1, color: awayFlagColor },
+    ];
+    corners.forEach((c, i) => {
+      // Flagpole
+      ctx.strokeStyle = '#e8e8e8';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(c.x, c.y);
+      ctx.lineTo(c.x, c.y - flagH);
+      ctx.stroke();
+      // Pennant - flutter via Math.sin
+      const flutter = Math.sin(this.time * 4 + i) * 1.5;
+      ctx.fillStyle = c.color;
+      ctx.beginPath();
+      ctx.moveTo(c.x, c.y - flagH);
+      ctx.lineTo(c.x + c.side * (flagW + flutter), c.y - flagH + 4);
+      ctx.lineTo(c.x, c.y - flagH + 8);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+      ctx.lineWidth = 0.6;
+      ctx.stroke();
+    });
   }
 
   drawGoalStructure(ctx, x, top, bottom, side) {
@@ -539,7 +577,7 @@ class Renderer {
 
       // Number on jersey
       ctx.fillStyle = this.getContrastColor(player.pos === 'GK' ? this.getGKColor(team.primaryColor) : team.primaryColor);
-      ctx.font = 'bold 6px Arial';
+      ctx.font = `900 6px ${this.fontDisplay}`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(player.num, 0, -1);
@@ -565,7 +603,7 @@ class Renderer {
     }
 
     // Name label with background
-    ctx.font = 'bold 7px Arial';
+    ctx.font = `bold 7px ${this.fontDisplay}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
     const nameW = ctx.measureText(player.name).width;
@@ -678,6 +716,14 @@ class Renderer {
     return (r + g + b) / 3 > 128 ? '#2D5016' : '#CCFF00';
   }
 
+  // Two-letter team initials for the broadcast scoreboard chips
+  shortInitials(shortName) {
+    if (!shortName) return '';
+    const tokens = shortName.split(/\s+/).filter(Boolean);
+    if (tokens.length >= 2) return (tokens[0][0] + tokens[1][0]).toUpperCase();
+    return shortName.slice(0, 3).toUpperCase();
+  }
+
   drawHair(ctx, player) {
     ctx.fillStyle = player.hairColor;
     switch (player.hair) {
@@ -765,77 +811,121 @@ class Renderer {
     const w = this.width;
     if (engine.state === 'idle') return;
 
-    // Modern scoreboard
-    const sbW = Math.min(360, w * 0.45);
-    const sbH = 50;
+    // Broadcast lower-third scoreboard
+    const sbW = Math.min(420, w * 0.52);
+    const sbH = 44;
     const sbX = (w - sbW) / 2;
-    const sbY = 6;
+    const sbY = 8;
+    const colorBarW = sbH; // square team blocks on each side
+    const homeColor = engine.homeTeamData.primaryColor;
+    const awayColor = engine.awayTeamData.primaryColor;
 
-    // Scoreboard bg with gradient
-    const sbGrad = ctx.createLinearGradient(sbX, sbY, sbX, sbY + sbH);
-    sbGrad.addColorStop(0, 'rgba(20,20,30,0.9)');
-    sbGrad.addColorStop(1, 'rgba(10,10,20,0.95)');
-    ctx.fillStyle = sbGrad;
-    this.roundRect(ctx, sbX, sbY, sbW, sbH, 10);
-    ctx.fill();
+    // Drop shadow under whole bar
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.fillRect(sbX + 2, sbY + 3, sbW, sbH);
 
-    // Team color accents
-    ctx.fillStyle = engine.homeTeamData.primaryColor;
-    this.roundRect(ctx, sbX, sbY, 6, sbH, 10);
-    ctx.fill();
-    ctx.fillRect(sbX + 3, sbY, 5, sbH);
+    // Center info plate (dark)
+    const plateGrad = ctx.createLinearGradient(0, sbY, 0, sbY + sbH);
+    plateGrad.addColorStop(0, 'rgba(15,15,25,0.96)');
+    plateGrad.addColorStop(1, 'rgba(5,5,15,0.98)');
+    ctx.fillStyle = plateGrad;
+    ctx.fillRect(sbX + colorBarW, sbY, sbW - colorBarW * 2, sbH);
 
-    ctx.fillStyle = engine.awayTeamData.primaryColor;
-    this.roundRect(ctx, sbX + sbW - 6, sbY, 6, sbH, 10);
-    ctx.fill();
-    ctx.fillRect(sbX + sbW - 8, sbY, 5, sbH);
+    // Solid team color blocks on each end
+    ctx.fillStyle = homeColor;
+    ctx.fillRect(sbX, sbY, colorBarW, sbH);
+    ctx.fillStyle = awayColor;
+    ctx.fillRect(sbX + sbW - colorBarW, sbY, colorBarW, sbH);
 
-    // Border
-    ctx.strokeStyle = 'rgba(255,255,255,0.15)';
-    ctx.lineWidth = 1;
-    this.roundRect(ctx, sbX, sbY, sbW, sbH, 10);
-    ctx.stroke();
+    // Subtle inner highlight on color blocks (jersey gloss)
+    const homeGloss = ctx.createLinearGradient(0, sbY, 0, sbY + sbH);
+    homeGloss.addColorStop(0, 'rgba(255,255,255,0.25)');
+    homeGloss.addColorStop(0.5, 'rgba(255,255,255,0)');
+    ctx.fillStyle = homeGloss;
+    ctx.fillRect(sbX, sbY, colorBarW, sbH);
+    ctx.fillRect(sbX + sbW - colorBarW, sbY, colorBarW, sbH);
 
-    // Team crests (color squares)
-    ctx.fillStyle = engine.homeTeamData.primaryColor;
-    this.roundRect(ctx, sbX + 14, sbY + 10, 28, 28, 4);
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.3)';
-    this.roundRect(ctx, sbX + 14, sbY + 10, 28, 28, 4);
-    ctx.stroke();
+    // Top accent stripe in team colors meeting at the score
+    const stripeH = 3;
+    const stripeMid = sbX + sbW / 2;
+    ctx.fillStyle = homeColor;
+    ctx.fillRect(sbX + colorBarW, sbY, stripeMid - sbX - colorBarW, stripeH);
+    ctx.fillStyle = awayColor;
+    ctx.fillRect(stripeMid, sbY, sbW - colorBarW - (stripeMid - sbX), stripeH);
 
-    ctx.fillStyle = engine.awayTeamData.primaryColor;
-    this.roundRect(ctx, sbX + sbW - 42, sbY + 10, 28, 28, 4);
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.3)';
-    this.roundRect(ctx, sbX + sbW - 42, sbY + 10, 28, 28, 4);
-    ctx.stroke();
+    // Bottom dark line for crisp edge
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(sbX, sbY + sbH - 2, sbW, 2);
 
-    // Team names
-    ctx.fillStyle = '#fff';
-    ctx.font = `bold ${Math.min(13, sbW * 0.04)}px Arial`;
-    ctx.textAlign = 'left';
-    ctx.fillText(engine.homeTeamData.shortName, sbX + 48, sbY + 28);
-    ctx.textAlign = 'right';
-    ctx.fillText(engine.awayTeamData.shortName, sbX + sbW - 48, sbY + 28);
-
-    // Score - large center
-    ctx.font = `bold ${Math.min(26, sbW * 0.075)}px Arial`;
+    // Team initials on color blocks (jersey style)
+    const initialSize = Math.min(20, colorBarW * 0.48);
+    ctx.font = `900 ${initialSize}px ${this.fontDisplay}`;
     ctx.textAlign = 'center';
-    ctx.fillStyle = '#fff';
-    ctx.fillText(`${engine.score.home}`, sbX + sbW / 2 - 22, sbY + 35);
-    ctx.fillStyle = 'rgba(255,255,255,0.4)';
-    ctx.fillText('-', sbX + sbW / 2, sbY + 34);
-    ctx.fillStyle = '#fff';
-    ctx.fillText(`${engine.score.away}`, sbX + sbW / 2 + 22, sbY + 35);
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = this.getContrastColor(homeColor);
+    ctx.fillText(this.shortInitials(engine.homeTeamData.shortName), sbX + colorBarW / 2, sbY + sbH / 2 + 2);
+    ctx.fillStyle = this.getContrastColor(awayColor);
+    ctx.fillText(this.shortInitials(engine.awayTeamData.shortName), sbX + sbW - colorBarW / 2, sbY + sbH / 2 + 2);
 
-    // Time
-    ctx.font = `bold ${Math.min(11, sbW * 0.033)}px Arial`;
-    ctx.fillStyle = '#6CABDD';
-    ctx.fillText(engine.getDisplayTime(), sbX + sbW / 2 - 18, sbY + 14);
-    ctx.fillStyle = 'rgba(255,255,255,0.4)';
-    ctx.font = `${Math.min(9, sbW * 0.028)}px Arial`;
-    ctx.fillText(engine.half === 1 ? '1ST' : '2ND', sbX + sbW / 2 + 14, sbY + 14);
+    // Team short names next to the blocks
+    const nameSize = Math.min(15, sbW * 0.038);
+    ctx.font = `bold ${nameSize}px ${this.fontDisplay}`;
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'left';
+    ctx.fillText(engine.homeTeamData.shortName, sbX + colorBarW + 8, sbY + sbH / 2 + 1);
+    ctx.textAlign = 'right';
+    ctx.fillText(engine.awayTeamData.shortName, sbX + sbW - colorBarW - 8, sbY + sbH / 2 + 1);
+
+    // Big center score
+    const scoreSize = Math.min(28, sbW * 0.075);
+    ctx.font = `900 ${scoreSize}px ${this.fontDisplay}`;
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'center';
+    ctx.fillText(`${engine.score.home}`, stripeMid - scoreSize * 0.65, sbY + sbH / 2 + 4);
+    ctx.fillText(`${engine.score.away}`, stripeMid + scoreSize * 0.65, sbY + sbH / 2 + 4);
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.fillText(':', stripeMid, sbY + sbH / 2 + 2);
+
+    ctx.textBaseline = 'alphabetic';
+
+    // Clock bar below scoreboard
+    const clockH = 16;
+    const clockW = Math.min(150, sbW * 0.4);
+    const clockX = (w - clockW) / 2;
+    const clockY = sbY + sbH + 2;
+
+    ctx.fillStyle = 'rgba(0,0,0,0.85)';
+    ctx.fillRect(clockX, clockY, clockW, clockH);
+    ctx.fillStyle = 'rgba(255,255,255,0.08)';
+    ctx.fillRect(clockX, clockY, clockW, 1);
+
+    // Pulsing red LIVE dot
+    if (engine.state === 'playing' || engine.state === 'kickoff') {
+      const pulse = 0.6 + Math.sin(this.time * 4) * 0.4;
+      ctx.fillStyle = `rgba(255,40,40,${pulse})`;
+      ctx.beginPath();
+      ctx.arc(clockX + 10, clockY + clockH / 2, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.font = `bold 9px ${this.fontDisplay}`;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('LIVE', clockX + 18, clockY + clockH / 2 + 1);
+    }
+
+    // Monospace clock
+    ctx.fillStyle = '#fff';
+    ctx.font = `bold 12px ${this.fontMono}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(engine.getDisplayTime(), clockX + clockW / 2 + 8, clockY + clockH / 2 + 1);
+
+    // Half indicator
+    ctx.fillStyle = 'rgba(255,215,0,0.85)';
+    ctx.font = `bold 9px ${this.fontDisplay}`;
+    ctx.textAlign = 'right';
+    ctx.fillText(engine.half === 1 ? '1ST' : '2ND', clockX + clockW - 8, clockY + clockH / 2 + 1);
+    ctx.textBaseline = 'alphabetic';
 
     // Power meter
     if (engine.isChargingShot) {
@@ -870,10 +960,10 @@ class Renderer {
 
     // Controls hint
     if (!input.isMobile && engine.state === 'playing') {
-      ctx.fillStyle = 'rgba(255,255,255,0.2)';
-      ctx.font = '9px Arial';
+      ctx.fillStyle = 'rgba(255,255,255,0.25)';
+      ctx.font = `bold 9px ${this.fontDisplay}`;
       ctx.textAlign = 'left';
-      ctx.fillText('WASD: Move | SPACE: Pass/Switch | X: Shoot | C: Tackle | SHIFT: Sprint', 8, this.height - 8);
+      ctx.fillText('WASD MOVE   •   SPACE PASS / SWITCH   •   X SHOOT   •   C TACKLE   •   SHIFT SPRINT', 10, this.height - 9);
     }
   }
 
@@ -883,17 +973,53 @@ class Renderer {
     const w = this.width;
     const alpha = Math.min(1, engine.commentaryTimer);
 
+    // Broadcast lower-third style
+    const text = engine.commentary;
+    ctx.save();
     ctx.globalAlpha = alpha;
-    ctx.fillStyle = 'rgba(0,0,0,0.6)';
-    const textW = Math.min(500, w * 0.6);
-    this.roundRect(ctx, (w - textW) / 2, this.height - 45, textW, 28, 6);
-    ctx.fill();
+    ctx.font = `bold ${Math.min(14, w * 0.022)}px ${this.fontDisplay}`;
+    const textW = ctx.measureText(text).width;
+    const padX = 18;
+    const tagW = 70; // "LIVE COMMS" tag width
+    const barH = 32;
+    const totalW = Math.min(w * 0.85, textW + tagW + padX * 2);
+    const barX = (w - totalW) / 2;
+    const barY = this.height - 56;
 
+    // Yellow accent bar on top
     ctx.fillStyle = '#FFD700';
-    ctx.font = `bold ${Math.min(13, w * 0.02)}px Arial`;
+    ctx.fillRect(barX, barY, totalW, 3);
+    // Main dark plate
+    ctx.fillStyle = 'rgba(8,12,22,0.92)';
+    ctx.fillRect(barX, barY + 3, totalW, barH);
+    // Tag block on the left
+    const tagColor = engine.homeTeamData ? engine.homeTeamData.primaryColor : '#444';
+    ctx.fillStyle = tagColor;
+    ctx.fillRect(barX, barY + 3, tagW, barH);
+    // Tag gloss
+    const gloss = ctx.createLinearGradient(0, barY, 0, barY + barH);
+    gloss.addColorStop(0, 'rgba(255,255,255,0.22)');
+    gloss.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = gloss;
+    ctx.fillRect(barX, barY + 3, tagW, barH);
+
+    ctx.fillStyle = this.getContrastColor(tagColor);
+    ctx.font = `900 10px ${this.fontDisplay}`;
     ctx.textAlign = 'center';
-    ctx.fillText(engine.commentary, w / 2, this.height - 27);
-    ctx.globalAlpha = 1;
+    ctx.textBaseline = 'middle';
+    ctx.fillText('LIVE', barX + tagW / 2, barY + 3 + barH / 2 - 5);
+    ctx.font = `bold 8px ${this.fontDisplay}`;
+    ctx.fillText('COMMS', barX + tagW / 2, barY + 3 + barH / 2 + 7);
+
+    // Commentary text
+    ctx.fillStyle = '#fff';
+    ctx.font = `bold ${Math.min(14, w * 0.022)}px ${this.fontDisplay}`;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, barX + tagW + padX, barY + 3 + barH / 2 + 1);
+
+    ctx.textBaseline = 'alphabetic';
+    ctx.restore();
   }
 
   drawMinimap() {
@@ -990,7 +1116,7 @@ class Renderer {
       ctx.fill(); ctx.stroke();
 
       ctx.fillStyle = '#fff';
-      ctx.font = `bold 11px Arial`;
+      ctx.font = `900 11px ${this.fontDisplay}`;
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText(btn.label, btn.x / dpr, btn.y / dpr);
     }
@@ -1003,43 +1129,101 @@ class Renderer {
 
     if (engine.state === 'goal_scored') {
       // Cinematic black bars
-      const barH = h * 0.08;
-      ctx.fillStyle = 'rgba(0,0,0,0.7)';
+      const barH = h * 0.09;
+      ctx.fillStyle = 'rgba(0,0,0,0.78)';
       ctx.fillRect(0, 0, w, barH);
       ctx.fillRect(0, h - barH, w, barH);
 
-      // GOAL text with heavy glow
-      const goalSize = Math.min(w * 0.14, 100);
+      // Determine the scoring team's colors
+      const scoringTeam = engine.lastGoalTeam === 'home' ? engine.homeTeamData : engine.awayTeamData;
+      const teamColor = (scoringTeam && scoringTeam.primaryColor) || '#FFD700';
+      const teamSecondary = (scoringTeam && scoringTeam.secondaryColor) || '#FFFFFF';
+      // White on white looks bad — fall back to gold for the glow
+      const glowColor = teamColor.toUpperCase() === '#FFFFFF' ? '#FFD700' : teamColor;
+
+      // Sweeping color band behind the GOAL text
+      const bandY = h * 0.32;
+      const bandH = h * 0.22;
+      const bandGrad = ctx.createLinearGradient(0, bandY, 0, bandY + bandH);
+      bandGrad.addColorStop(0, 'rgba(0,0,0,0)');
+      bandGrad.addColorStop(0.5, teamColor + 'CC');
+      bandGrad.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = bandGrad;
+      ctx.fillRect(0, bandY, w, bandH);
+
+      // Diagonal speed lines from the band
+      ctx.strokeStyle = teamSecondary + '55';
+      ctx.lineWidth = 2;
+      for (let i = 0; i < 8; i++) {
+        const off = (this.time * 200 + i * 90) % (w + 200) - 100;
+        ctx.beginPath();
+        ctx.moveTo(off, bandY);
+        ctx.lineTo(off + 60, bandY + bandH);
+        ctx.stroke();
+      }
+
+      // GOAL text with team-colored glow + pulsing scale
+      const goalSize = Math.min(w * 0.16, 130);
       ctx.save();
-      ctx.shadowColor = '#FFD700';
-      ctx.shadowBlur = 30;
-      ctx.fillStyle = '#FFD700';
-      ctx.font = `bold ${goalSize}px Arial`;
+      ctx.shadowColor = glowColor;
+      ctx.shadowBlur = 35;
+      ctx.fillStyle = '#fff';
+      ctx.font = `900 ${goalSize}px ${this.fontDisplay}`;
       ctx.textAlign = 'center';
-      // Pulsing scale
-      const pulse = 1 + Math.sin(this.time * 8) * 0.03;
+      ctx.textBaseline = 'middle';
+      const pulse = 1 + Math.sin(this.time * 9) * 0.04;
       ctx.translate(w / 2, h * 0.42);
       ctx.scale(pulse, pulse);
-      ctx.fillText('GOAL!!', 0, 0);
+      ctx.fillText('GOAL!', 0, 0);
+      // Outline pass for definition
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = glowColor;
+      ctx.shadowBlur = 0;
+      ctx.strokeText('GOAL!', 0, 0);
       ctx.restore();
+      ctx.textBaseline = 'alphabetic';
 
       if (engine.goalScorer) {
-        ctx.shadowColor = 'rgba(255,255,255,0.5)';
-        ctx.shadowBlur = 10;
-        ctx.fillStyle = '#fff';
-        ctx.font = `bold ${Math.min(w * 0.045, 32)}px Arial`;
-        ctx.textAlign = 'center';
-        ctx.fillText(engine.goalScorer.name, w / 2, h * 0.52);
-        ctx.shadowBlur = 0;
+        // Scorer plate (lower third)
+        const plateW = Math.min(w * 0.6, 520);
+        const plateH = 90;
+        const plateX = (w - plateW) / 2;
+        const plateY = h * 0.56;
 
-        ctx.fillStyle = engine.goalScorer.teamData.primaryColor;
-        ctx.font = `bold ${Math.min(w * 0.025, 18)}px Arial`;
-        ctx.fillText(engine.goalScorer.teamData.name, w / 2, h * 0.58);
+        ctx.fillStyle = 'rgba(0,0,0,0.85)';
+        ctx.fillRect(plateX, plateY, plateW, plateH);
+        // Team color side bar
+        ctx.fillStyle = teamColor;
+        ctx.fillRect(plateX, plateY, 8, plateH);
+        // Top accent
+        ctx.fillStyle = teamSecondary;
+        ctx.fillRect(plateX + 8, plateY, plateW - 8, 2);
 
-        // Updated score
+        // SCORER label
+        ctx.fillStyle = teamColor;
+        ctx.font = `900 11px ${this.fontDisplay}`;
+        ctx.textAlign = 'left';
+        ctx.fillText('SCORER', plateX + 20, plateY + 20);
+
+        // Scorer name
         ctx.fillStyle = '#fff';
-        ctx.font = `bold ${Math.min(w * 0.06, 44)}px Arial`;
-        ctx.fillText(`${engine.score.home} - ${engine.score.away}`, w / 2, h * 0.68);
+        ctx.font = `900 ${Math.min(w * 0.04, 28)}px ${this.fontDisplay}`;
+        ctx.fillText(engine.goalScorer.name.toUpperCase(), plateX + 20, plateY + 48);
+
+        // Team name + score on right
+        ctx.fillStyle = 'rgba(255,255,255,0.7)';
+        ctx.font = `bold ${Math.min(w * 0.02, 14)}px ${this.fontDisplay}`;
+        ctx.fillText((engine.goalScorer.teamData.name || '').toUpperCase(), plateX + 20, plateY + 70);
+
+        ctx.fillStyle = '#fff';
+        ctx.font = `900 ${Math.min(w * 0.06, 42)}px ${this.fontMono}`;
+        ctx.textAlign = 'right';
+        ctx.fillText(`${engine.score.home}-${engine.score.away}`, plateX + plateW - 20, plateY + 60);
+
+        // Time
+        ctx.fillStyle = teamColor;
+        ctx.font = `bold 11px ${this.fontDisplay}`;
+        ctx.fillText(engine.getDisplayTime() + "'", plateX + plateW - 20, plateY + 78);
       }
     }
 
