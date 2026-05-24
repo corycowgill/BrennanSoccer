@@ -84,6 +84,7 @@ class Renderer {
     }
 
     this.drawParticles();
+    this.drawAimLine();
     this.drawGoalStructure(ctx, engine.pitch.goalLineLeft, engine.pitch.goalTop, engine.pitch.goalBottom, 'left');
     this.drawGoalStructure(ctx, engine.pitch.goalLineRight, engine.pitch.goalTop, engine.pitch.goalBottom, 'right');
 
@@ -470,10 +471,18 @@ class Renderer {
     const goalH = bottom - top;
     const sideTriangleW = Math.abs(depth) * 0.55;
 
+    // Who defends this goal? Tint the interior with their team color so
+    // you can tell at a glance which way you're attacking.
+    const defendingTeam = this._defendingTeamFor(side);
+    const defendColor = defendingTeam ? defendingTeam.primaryColor : '#888888';
+
     // === BACK NET PANEL (vertical mesh inside the goal) ===
-    // Solid back wall fill (slight dark inside the goal)
+    // Dark base
     ctx.fillStyle = 'rgba(20,20,25,0.55)';
     const fillX = side === 'left' ? backX : x;
+    ctx.fillRect(fillX, top, Math.abs(depth), goalH);
+    // Team-color wash on the back wall
+    ctx.fillStyle = defendColor + '40'; // 25% alpha
     ctx.fillRect(fillX, top, Math.abs(depth), goalH);
 
     // Subtle interior gradient (darker at top corners)
@@ -1009,6 +1018,72 @@ class Renderer {
     return shortName.slice(0, 3).toUpperCase();
   }
 
+  // Which team defends the goal on `side` ('left' or 'right'), accounting
+  // for swapped sides after halftime.
+  _defendingTeamFor(side) {
+    const homeOnLeft = engine.homePlayers[0] && engine.homePlayers[0].teamSide === 'left';
+    if (side === 'left') return homeOnLeft ? engine.homeTeamData : engine.awayTeamData;
+    return homeOnLeft ? engine.awayTeamData : engine.homeTeamData;
+  }
+
+  // Aim line from the controlled player to the goal they're attacking,
+  // shown while they hold the shoot button. Length and intensity scale
+  // with power so you can read your shot before you fire.
+  drawAimLine() {
+    if (!engine.isChargingShot) return;
+    const pl = engine.controlledPlayer;
+    if (!pl || engine.ball.owner !== pl) return;
+    const ctx = this.ctx;
+    const power = Math.max(0.05, engine.shootPower);
+    const attackingRight = pl.teamSide === 'left';
+    const goalX = attackingRight ? engine.pitch.goalLineRight : engine.pitch.goalLineLeft;
+    const goalY = engine.pitch.centerY;
+
+    const dx = goalX - pl.x;
+    const dy = goalY - pl.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < 1) return;
+    const ux = dx / dist, uy = dy / dist;
+
+    // Length scales with charge — short flick at low power, long bomb at full
+    const lineLen = 30 + power * Math.min(dist - 20, 380);
+    const endX = pl.x + ux * lineLen;
+    const endY = pl.y + uy * lineLen;
+
+    // Power-based color (green → yellow → red)
+    const color = power < 0.5
+      ? `rgba(0,255,80,${0.5 + power * 0.4})`
+      : power < 0.85
+        ? `rgba(255,200,0,${0.6 + (power - 0.5) * 0.4})`
+        : `rgba(255,80,40,${0.8})`;
+
+    // Dashed line with motion
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2.5;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 8;
+    ctx.setLineDash([8, 6]);
+    ctx.lineDashOffset = -this.time * 18;
+    ctx.beginPath();
+    ctx.moveTo(pl.x + ux * 10, pl.y + uy * 10);
+    ctx.lineTo(endX, endY);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Arrow head at end
+    const ah = 8;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(endX, endY);
+    ctx.lineTo(endX - ux * ah - uy * ah * 0.6, endY - uy * ah + ux * ah * 0.6);
+    ctx.lineTo(endX - ux * ah + uy * ah * 0.6, endY - uy * ah - ux * ah * 0.6);
+    ctx.closePath();
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.restore();
+  }
+
   drawHair(ctx, player) {
     ctx.fillStyle = player.hairColor;
     switch (player.hair) {
@@ -1155,7 +1230,7 @@ class Renderer {
     ctx.fillStyle = this.getContrastColor(awayColor);
     ctx.fillText(this.shortInitials(engine.awayTeamData.shortName), sbX + sbW - colorBarW / 2, sbY + sbH / 2 + 2);
 
-    // Team short names next to the blocks
+    // Team short names + direction-of-attack arrow next to the blocks
     const nameSize = Math.min(15, sbW * 0.038);
     ctx.font = `bold ${nameSize}px ${this.fontDisplay}`;
     ctx.fillStyle = '#fff';
@@ -1163,6 +1238,18 @@ class Renderer {
     ctx.fillText(engine.homeTeamData.shortName, sbX + colorBarW + 8, sbY + sbH / 2 + 1);
     ctx.textAlign = 'right';
     ctx.fillText(engine.awayTeamData.shortName, sbX + sbW - colorBarW - 8, sbY + sbH / 2 + 1);
+
+    // Arrows under each team name showing which way they're attacking
+    const homeAttacksRight = engine.homePlayers[0] && engine.homePlayers[0].teamSide === 'left';
+    const arrowY = sbY + sbH - 8;
+    ctx.font = `900 9px ${this.fontDisplay}`;
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+    ctx.textAlign = 'left';
+    ctx.fillText(homeAttacksRight ? 'ATTACKS →' : '← ATTACKS', sbX + colorBarW + 8, arrowY);
+    ctx.textAlign = 'right';
+    ctx.fillText(homeAttacksRight ? '← ATTACKS' : 'ATTACKS →', sbX + sbW - colorBarW - 8, arrowY);
+    ctx.textBaseline = 'alphabetic';
 
     // Big center score (with pop animation when a goal just scored)
     const scoreSize = Math.min(28, sbW * 0.075);
