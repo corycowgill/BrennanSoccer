@@ -139,70 +139,159 @@ class Renderer {
   }
 
   drawStands(ctx, x, y, w, h, stadium, side) {
-    // Gradient stand
-    const standGrad = ctx.createLinearGradient(0, y, 0, y + h);
-    standGrad.addColorStop(0, stadium.standColor);
-    standGrad.addColorStop(1, stadium.standAccent);
-    ctx.fillStyle = standGrad;
+    // Concrete base (tiered)
+    const baseGrad = ctx.createLinearGradient(0, y, 0, y + h);
+    baseGrad.addColorStop(0, this.darkenColor(stadium.standColor, 20));
+    baseGrad.addColorStop(1, this.darkenColor(stadium.standAccent, 35));
+    ctx.fillStyle = baseGrad;
     ctx.fillRect(x, y, w, h);
 
-    // Crowd with wave animation
-    const density = stadium.crowdDensity;
-    const spacing = 7;
+    // Define tiered seating - 3 tiers separated by walkway bands
+    const tiers = 3;
+    const tierGap = 4; // walkway between tiers
+    const usableH = h - tierGap * (tiers - 1);
+    const tierH = usableH / tiers;
     const colors = [stadium.crowdColor1, stadium.crowdColor2, stadium.crowdColor3];
-    const time = this.time;
-    // Mexican wave during goals
+    const skinColors = ['#F5D6BA', '#E8C99A', '#C4A882', '#8B6914', '#6B4226'];
     const isGoal = engine.state === 'goal_scored';
-    const waveSpeed = isGoal ? 3 : 0.5;
-    const waveAmp = isGoal ? 4 : 1.5;
+    const time = this.time;
 
-    for (let cx = x + 3; cx < x + w; cx += spacing) {
-      for (let cy = y + 3; cy < y + h - 2; cy += spacing) {
-        const hash = ((cx * 31 + cy * 17) & 0xFFFF);
-        if ((hash % 100) / 100 > density) continue;
-        const colorIdx = hash % colors.length;
-        const wave = Math.sin(time * waveSpeed + cx * 0.04 + cy * 0.02) * waveAmp;
-        const jumpUp = isGoal ? Math.max(0, Math.sin(time * 8 + cx * 0.1)) * 3 : 0;
+    // Desaturate the bright team colors a bit so the distant crowd reads as
+    // a sea of people, not as a flashing pixel field.
+    const dimmedColors = colors.map(c => this.mixColor(c, '#3a3a3a', 0.45));
 
-        // Body
-        ctx.fillStyle = colors[colorIdx];
-        ctx.fillRect(cx, cy + wave - jumpUp, 4, 5);
-        // Head
-        const skinColors = ['#F5D6BA', '#E8C99A', '#C4A882', '#8B6914', '#6B4226'];
-        ctx.fillStyle = skinColors[hash % skinColors.length];
-        ctx.beginPath();
-        ctx.arc(cx + 2, cy + wave - jumpUp - 2, 2, 0, Math.PI * 2);
-        ctx.fill();
+    // Tier-by-tier rendering
+    for (let t = 0; t < tiers; t++) {
+      const ty = y + t * (tierH + tierGap);
+      // Subtle tier highlight on top edge
+      ctx.fillStyle = 'rgba(255,255,255,0.06)';
+      ctx.fillRect(x, ty, w, 1);
+
+      // Seat rows inside this tier
+      const rowH = 5;
+      const rowSpacing = 2;
+      for (let ry = ty + 2; ry < ty + tierH - 1; ry += rowH + rowSpacing) {
+        // Row separator (concrete step)
+        ctx.fillStyle = 'rgba(0,0,0,0.35)';
+        ctx.fillRect(x, ry + rowH, w, 1);
+        ctx.fillStyle = 'rgba(255,255,255,0.05)';
+        ctx.fillRect(x, ry + rowH + 1, w, 1);
+
+        // Wave / pulse
+        const waveSpeed = isGoal ? 3 : 0.6;
+        const waveAmp = isGoal ? 3 : 0;
+
+        // Sparser seating: every ~8px and only ~density fraction filled
+        const seatStep = 8;
+        for (let sx = x + 3; sx < x + w; sx += seatStep) {
+          const hash = (sx * 31 + ry * 17) & 0xFFFF;
+          if ((hash % 100) / 100 > stadium.crowdDensity * 0.7) continue;
+
+          const wave = Math.sin(time * waveSpeed + sx * 0.04 + t * 0.6) * waveAmp;
+          const jump = isGoal ? Math.max(0, Math.sin(time * 8 + sx * 0.08)) * 2 : 0;
+
+          // Single 3x3 dot per "person" — head merged into torso visually
+          ctx.fillStyle = dimmedColors[hash % dimmedColors.length];
+          ctx.fillRect(sx, ry + wave - jump, 3, 3);
+          // Tiny dark spot for the head silhouette
+          ctx.fillStyle = 'rgba(0,0,0,0.45)';
+          ctx.fillRect(sx + 0.5, ry - 1 + wave - jump, 2, 1);
+        }
       }
     }
 
-    if (stadium.hasRoof && (side === 'top')) {
+    // Vertical structural columns (every ~110px) — concrete piers
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    for (let cx = x + 30; cx < x + w; cx += 110) {
+      ctx.fillRect(cx, y, 3, h);
+    }
+
+    // Roof shadow on top stands
+    if (stadium.hasRoof && side === 'top') {
+      // Shadow gradient under roof
+      const shadowGrad = ctx.createLinearGradient(0, y, 0, y + 18);
+      shadowGrad.addColorStop(0, 'rgba(0,0,0,0.55)');
+      shadowGrad.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = shadowGrad;
+      ctx.fillRect(x, y, w, 18);
+
+      // Roof structure
       ctx.fillStyle = stadium.roofColor;
-      ctx.fillRect(x, y - 6, w, 10);
-      // Roof edge highlight
-      ctx.fillStyle = 'rgba(255,255,255,0.1)';
-      ctx.fillRect(x, y + 3, w, 1);
+      ctx.fillRect(x, y - 8, w, 10);
+      // Roof underside
+      ctx.fillStyle = 'rgba(0,0,0,0.4)';
+      ctx.fillRect(x, y + 2, w, 2);
+      // Roof front lip highlight
+      ctx.fillStyle = 'rgba(255,255,255,0.18)';
+      ctx.fillRect(x, y - 8, w, 1);
+    }
+
+    // Bottom railing — keeps the stand from blending into the ad boards
+    if (side === 'top') {
+      ctx.fillStyle = 'rgba(255,255,255,0.5)';
+      ctx.fillRect(x, y + h - 2, w, 1);
+      ctx.fillStyle = 'rgba(0,0,0,0.4)';
+      ctx.fillRect(x, y + h - 1, w, 1);
+    } else if (side === 'bottom') {
+      ctx.fillStyle = 'rgba(255,255,255,0.5)';
+      ctx.fillRect(x, y + 1, w, 1);
+      ctx.fillStyle = 'rgba(0,0,0,0.4)';
+      ctx.fillRect(x, y, w, 1);
     }
   }
 
   drawAdBoards(ctx, p, stadium) {
-    const boardH = 7;
+    const boardH = 10;
     const colors = stadium.adBoardColors;
-    const segW = 45;
+    const segW = 90;
+    const sponsors = ['FLY EMIRATES', 'CHEVROLET', 'STANDARD CHARTERED', 'QATAR AIRWAYS', 'AON', 'ETIHAD', 'MAIN GLOBAL', 'AIA', 'JEEP', 'AMERICAN EXPRESS', 'KIA'];
 
-    // Animated LED effect
-    const ledOffset = Math.floor(this.time * 30) % segW;
+    // Scroll the marquee
+    const scrollOffset = (this.time * 18) % segW;
 
-    [p.y - boardH - 2, p.y + p.height + 2].forEach((y, row) => {
-      for (let x = p.x; x < p.x + p.width; x += segW) {
-        const idx = (Math.floor((x + row * 25) / segW) + Math.floor(this.time * 0.5)) % colors.length;
-        ctx.fillStyle = colors[idx];
-        ctx.fillRect(x, y, segW - 1, boardH);
-        // LED glow
-        ctx.fillStyle = 'rgba(255,255,255,0.15)';
-        ctx.fillRect(x + 1, y + 1, segW - 3, 2);
+    [p.y - boardH - 3, p.y + p.height + 3].forEach((y, row) => {
+      ctx.save();
+      // Clip to pitch width so panels appear to wrap
+      ctx.beginPath();
+      ctx.rect(p.x, y, p.width, boardH);
+      ctx.clip();
+
+      for (let i = -1; i * segW < p.width + segW; i++) {
+        const baseX = p.x + i * segW - scrollOffset;
+        const colorIdx = (i + row * 3 + Math.floor(this.time * 0.4)) % colors.length;
+        const color = colors[(colorIdx + colors.length) % colors.length];
+
+        // Panel
+        const panelGrad = ctx.createLinearGradient(0, y, 0, y + boardH);
+        panelGrad.addColorStop(0, this.lightenColor(color, 25));
+        panelGrad.addColorStop(0.5, color);
+        panelGrad.addColorStop(1, this.darkenColor(color, 30));
+        ctx.fillStyle = panelGrad;
+        ctx.fillRect(baseX, y, segW - 2, boardH);
+
+        // LED scanline texture
+        ctx.fillStyle = 'rgba(0,0,0,0.18)';
+        for (let ly = y + 1; ly < y + boardH; ly += 2) {
+          ctx.fillRect(baseX, ly, segW - 2, 1);
+        }
+
+        // Sponsor text
+        const text = sponsors[(i + row * 5 + colorIdx) % sponsors.length];
+        ctx.fillStyle = this.getContrastColor(color);
+        ctx.font = `900 6.5px ${this.fontDisplay}`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(text, baseX + (segW - 2) / 2, y + boardH / 2 + 0.5);
       }
+      ctx.restore();
+
+      // Top + bottom edge highlights for the whole board
+      ctx.fillStyle = 'rgba(255,255,255,0.25)';
+      ctx.fillRect(p.x, y, p.width, 1);
+      ctx.fillStyle = 'rgba(0,0,0,0.4)';
+      ctx.fillRect(p.x, y + boardH - 1, p.width, 1);
     });
+    ctx.textBaseline = 'alphabetic';
   }
 
   drawFloodlights(ctx, p, totalW, totalH) {
@@ -1362,5 +1451,19 @@ class Renderer {
     const g = Math.max(0, parseInt(hex.slice(3, 5), 16) - amount);
     const b = Math.max(0, parseInt(hex.slice(5, 7), 16) - amount);
     return `rgb(${r},${g},${b})`;
+  }
+
+  // Mix two hex colors. t=0 returns a, t=1 returns b.
+  mixColor(a, b, t) {
+    const ar = parseInt(a.slice(1, 3), 16);
+    const ag = parseInt(a.slice(3, 5), 16);
+    const ab = parseInt(a.slice(5, 7), 16);
+    const br = parseInt(b.slice(1, 3), 16);
+    const bg = parseInt(b.slice(3, 5), 16);
+    const bb = parseInt(b.slice(5, 7), 16);
+    const r = Math.round(ar + (br - ar) * t);
+    const g = Math.round(ag + (bg - ag) * t);
+    const bl = Math.round(ab + (bb - ab) * t);
+    return `rgb(${r},${g},${bl})`;
   }
 }
